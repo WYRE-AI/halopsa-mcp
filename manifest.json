@@ -1,0 +1,33 @@
+{
+  "manifest_version": "0.3",
+  "name": "halopsa-mcp",
+  "version": "0.0.1",
+  "display_name": "HaloPSA MCP Server",
+  "description": "HaloPSA MCP server with decision tree architecture for Claude",
+  "author": { "name": "Aaron Sachs", "url": "https://github.com/asachs01" },
+  "repository": { "type": "git", "url": "https://github.com/wyre-technology/halopsa-mcp" },
+  "homepage": "https://github.com/wyre-technology/halopsa-mcp",
+  "license": "MIT",
+  "keywords": ["halopsa", "psa", "tickets", "msp", "it-management"],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/index.js"],
+      "env": {
+        "HALOPSA_CLIENT_ID": "${user_config.halopsa_client_id}",
+        "HALOPSA_CLIENT_SECRET": "${user_config.halopsa_client_secret}",
+        "HALOPSA_TENANT": "${user_config.halopsa_tenant}",
+        "MCP_TRANSPORT": "stdio"
+      }
+    }
+  },
+  "tools_generated": true,
+  "user_config": {
+    "halopsa_client_id": { "type": "string", "title": "HaloPSA Client ID", "description": "Your HaloPSA client ID", "required": true },
+    "halopsa_client_secret": { "type": "string", "title": "HaloPSA Client Secret", "description": "Your HaloPSA client secret", "required": true, "sensitive": true },
+    "halopsa_tenant": { "type": "string", "title": "HaloPSA Tenant", "description": "Your HaloPSA tenant name", "required": true }
+  },
+  "compatibility": { "platforms": ["darwin", "win32", "linux"], "runtimes": { "node": ">=18.0.0" }, "claude_desktop": ">=0.10.0" }
+}
