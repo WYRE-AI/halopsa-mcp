@@ -1,0 +1,29 @@
+spec:
+  name: halopsa-mcp
+  services:
+  - name: halopsa-mcp
+    github:
+      repo: wyre-technology/halopsa-mcp
+      branch: main
+      deploy_on_push: true
+    source_dir: /
+    dockerfile_path: Dockerfile
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+    - key: MCP_TRANSPORT
+      value: "http"
+      scope: RUN_TIME
+    - key: NODE_ENV
+      value: "production"
+      scope: RUN_TIME
+    - key: HALOPSA_CLIENT_ID
+      type: SECRET
+      scope: RUN_AND_BUILD_TIME
+    - key: HALOPSA_CLIENT_SECRET
+      type: SECRET
+      scope: RUN_AND_BUILD_TIME
+    - key: HALOPSA_TENANT
+      type: SECRET
+      scope: RUN_AND_BUILD_TIME
