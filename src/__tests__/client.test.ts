@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { getCredentials, getClient, clearClient } from "../utils/client.js";
 
 // Mock the node-halopsa library
-vi.mock("@asachs01/node-halopsa", () => ({
+vi.mock("@wyre-technology/node-halopsa", () => ({
   HaloPsaClient: vi.fn().mockImplementation((config) => ({
     config,
     tickets: {
