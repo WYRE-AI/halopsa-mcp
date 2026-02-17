@@ -5,7 +5,7 @@
  * to avoid loading the entire library upfront.
  */
 
-import type { HaloPsaClient } from "@asachs01/node-halopsa";
+import type { HaloPsaClient } from "@wyre-technology/node-halopsa";
 
 export interface HaloPsaCredentials {
   clientId: string;
@@ -64,7 +64,7 @@ export async function getClient(): Promise<HaloPsaClient> {
 
   if (!_client) {
     // Lazy import the library
-    const { HaloPsaClient } = await import("@asachs01/node-halopsa");
+    const { HaloPsaClient } = await import("@wyre-technology/node-halopsa");
     _client = new HaloPsaClient({
       clientId: creds.clientId,
       clientSecret: creds.clientSecret,
