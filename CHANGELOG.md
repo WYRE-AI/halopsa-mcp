@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/wyre-technology/halopsa-mcp/compare/v1.1.0...v1.1.1) (2026-02-18)
+
+
+### Bug Fixes
+
+* rename pack-mcpb.js to .cjs for ESM compatibility ([c722340](https://github.com/wyre-technology/halopsa-mcp/commit/c7223404a1d220880328b9b869acfaf4387e1e39))
+
 # [1.1.0](https://github.com/wyre-technology/halopsa-mcp/compare/v1.0.0...v1.1.0) (2026-02-18)
 
 
