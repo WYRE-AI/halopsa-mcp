@@ -1,3 +1,19 @@
+# [1.1.0](https://github.com/wyre-technology/halopsa-mcp/compare/v1.0.0...v1.1.0) (2026-02-18)
+
+
+### Bug Fixes
+
+* **ci:** fix release workflow failures ([8292243](https://github.com/wyre-technology/halopsa-mcp/commit/829224386f0edc4f79771d4ffcd58a00af655416))
+* **docker:** drop arm64 platform to fix QEMU build failures ([de206bc](https://github.com/wyre-technology/halopsa-mcp/commit/de206bccd2a93395bbd49dcda192b3c0bdecb5a6))
+* use npm install instead of npm ci for lock file compatibility ([04d1882](https://github.com/wyre-technology/halopsa-mcp/commit/04d1882b4958c2021083f9e28ceebbb9fb564f4e))
+
+
+### Features
+
+* add MCPB bundle to release workflow ([6de2350](https://github.com/wyre-technology/halopsa-mcp/commit/6de2350901cfafe4f9a1ae8ecaf68788651770ea))
+* add MCPB manifest for desktop installation ([f2b77ac](https://github.com/wyre-technology/halopsa-mcp/commit/f2b77acb65b62a78fd63d0837ea3c7f94cee079b))
+* add MCPB pack script ([440ed6e](https://github.com/wyre-technology/halopsa-mcp/commit/440ed6e4b8e628f091b9d5cb53fbf3165d3edfc7))
+
 # 1.0.0 (2026-02-17)
 
 
