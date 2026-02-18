@@ -1,3 +1,10 @@
+## [1.1.2](https://github.com/wyre-technology/halopsa-mcp/compare/v1.1.1...v1.1.2) (2026-02-18)
+
+
+### Bug Fixes
+
+* strip scope from MCPB bundle filename ([65c2a27](https://github.com/wyre-technology/halopsa-mcp/commit/65c2a27f4ad4f2b09674af4f36cbb1bd48fa9a93))
+
 ## [1.1.1](https://github.com/wyre-technology/halopsa-mcp/compare/v1.1.0...v1.1.1) (2026-02-18)
 
 
