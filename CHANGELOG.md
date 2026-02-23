@@ -1,3 +1,11 @@
+## [1.1.4](https://github.com/wyre-technology/halopsa-mcp/compare/v1.1.3...v1.1.4) (2026-02-23)
+
+
+### Bug Fixes
+
+* quote MCPB bundle filename to prevent shell glob expansion failure ([d1ec9db](https://github.com/wyre-technology/halopsa-mcp/commit/d1ec9db5d613dfec001826e84904c648e3fd3e08))
+* regenerate package-lock.json to sync with package.json ([d389207](https://github.com/wyre-technology/halopsa-mcp/commit/d38920797a695d010f792cb172d555128d29ec6c))
+
 ## [1.1.3](https://github.com/wyre-technology/halopsa-mcp/compare/v1.1.2...v1.1.3) (2026-02-18)
 
 
