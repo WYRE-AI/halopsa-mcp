@@ -1,3 +1,11 @@
+## [1.1.5](https://github.com/wyre-technology/halopsa-mcp/compare/v1.1.4...v1.1.5) (2026-03-02)
+
+
+### Bug Fixes
+
+* **ci:** fix broken YAML in Discord notification step ([7d0e7d0](https://github.com/wyre-technology/halopsa-mcp/commit/7d0e7d074bc9a394eb335591fffc0f8f8a3af4d8))
+* **ci:** move Discord notification into release workflow ([59afb78](https://github.com/wyre-technology/halopsa-mcp/commit/59afb78f4cfd8fb78576e0717ac938623bffabc4))
+
 ## [1.1.4](https://github.com/wyre-technology/halopsa-mcp/compare/v1.1.3...v1.1.4) (2026-02-23)
 
 
