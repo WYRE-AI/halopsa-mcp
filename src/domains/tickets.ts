@@ -7,6 +7,7 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { DomainHandler, CallToolResult } from "../utils/types.js";
 import { getClient } from "../utils/client.js";
+import { elicitSelection } from "../utils/elicitation.js";
 
 /**
  * Get ticket domain tools
@@ -182,12 +183,40 @@ async function handleCall(
   switch (toolName) {
     case "halopsa_tickets_list": {
       const limit = (args.limit as number) || 50;
+      let openOnly = args.open_only as boolean | undefined;
+      let closedOnly = args.closed_only as boolean | undefined;
+
+      // If no filters provided, elicit a date range from the user
+      const hasFilters =
+        args.client_id || args.status_id || args.agent_id ||
+        args.open_only !== undefined || args.closed_only !== undefined;
+
+      if (!hasFilters) {
+        const selection = await elicitSelection(
+          "No filters provided. Would you like to narrow the ticket list?",
+          "date_range",
+          [
+            { value: "open", label: "Open tickets only" },
+            { value: "today", label: "Today's tickets" },
+            { value: "past_week", label: "Past week" },
+            { value: "past_month", label: "Past month" },
+            { value: "all", label: "All tickets (no filter)" },
+          ]
+        );
+
+        if (selection === "open") {
+          openOnly = true;
+        }
+        // Note: HaloPSA list API may not support date filtering directly,
+        // so we use open_only as the primary elicited filter
+      }
+
       const response = await client.tickets.list({
         client_id: args.client_id as number | undefined,
         status_id: args.status_id as number | undefined,
         agent_id: args.agent_id as number | undefined,
-        open_only: args.open_only as boolean | undefined,
-        closed_only: args.closed_only as boolean | undefined,
+        open_only: openOnly,
+        closed_only: closedOnly,
         pageSize: limit,
       });
 
