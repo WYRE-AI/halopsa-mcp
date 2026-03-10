@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/wyre-technology/halopsa-mcp/compare/v1.1.5...v1.2.0) (2026-03-10)
+
+
+### Features
+
+* **elicitation:** add MCP elicitation support with graceful fallback ([86c9c54](https://github.com/wyre-technology/halopsa-mcp/commit/86c9c545410ed4bf155132abd299590beec6984d))
+
 ## [1.1.5](https://github.com/wyre-technology/halopsa-mcp/compare/v1.1.4...v1.1.5) (2026-03-02)
 
 
