@@ -7,6 +7,7 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { DomainHandler, CallToolResult } from "../utils/types.js";
 import { getClient } from "../utils/client.js";
+import { elicitText } from "../utils/elicitation.js";
 
 /**
  * Get client domain tools
@@ -111,8 +112,25 @@ async function handleCall(
   switch (toolName) {
     case "halopsa_clients_list": {
       const limit = (args.limit as number) || 50;
+      let search = args.search as string | undefined;
+
+      // If no filters provided, elicit a search term from the user
+      const hasFilters = args.search || args.inactive !== undefined;
+
+      if (!hasFilters) {
+        const searchTerm = await elicitText(
+          "No search filters provided. Would you like to search for a specific client?",
+          "search",
+          "Enter a client name or keyword to search"
+        );
+
+        if (searchTerm) {
+          search = searchTerm;
+        }
+      }
+
       const response = await client.clients.list({
-        search: args.search as string | undefined,
+        search,
         inactive: args.inactive as boolean | undefined,
         pageSize: limit,
       });
