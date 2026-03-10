@@ -94,6 +94,17 @@ jobs:
           DESC="**${{ github.repository }}** — [v${VERSION}](https://github.com/${{ github.repository }}/releases/tag/v${VERSION})"$'\n'"${SUMMARY}"
           PAYLOAD=$(jq -n --arg title "New Release: v${VERSION}" --arg desc "$DESC" '{embeds: [{title: $title, description: $desc, color: 5763847}]}')
           curl -sf -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK"
+
+      - name: Trigger MCP Gateway redeploy
+        if: steps.version.outputs.released == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GATEWAY_DEPLOY_PAT }}
+        run: |
+          gh api repos/wyre-technology/mcp-gateway/dispatches \
+            -f event_type=mcp-server-updated \
+            -f "client_payload[server]=${{ github.event.repository.name }}" \
+            -f "client_payload[version]=${{ steps.version.outputs.version }}"
+
   docker:
     name: Docker
     runs-on: ubuntu-latest
