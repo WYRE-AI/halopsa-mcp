@@ -1,0 +1,24 @@
+# Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required:
+      - halopsaBaseUrl
+      - halopsaClientId
+      - halopsaClientSecret
+    properties:
+      halopsaBaseUrl:
+        type: string
+        description: Your HaloPSA instance base URL
+      halopsaClientId:
+        type: string
+        description: Your HaloPSA API client ID
+      halopsaClientSecret:
+        type: string
+        description: Your HaloPSA API client secret
+      halopsaTenant:
+        type: string
+        description: Your HaloPSA tenant name (if multi-tenant)
+  commandFunction: |-
+    (config) => ({ command: 'node', args: ['dist/index.js'], env: { HALOPSA_BASE_URL: config.halopsaBaseUrl, HALOPSA_CLIENT_ID: config.halopsaClientId, HALOPSA_CLIENT_SECRET: config.halopsaClientSecret, HALOPSA_TENANT: config.halopsaTenant || '', MCP_TRANSPORT: 'stdio' } })
