@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/wyre-technology/halopsa-mcp/compare/v1.2.0...v1.2.1) (2026-03-31)
+
+
+### Bug Fixes
+
+* **deploy:** replace node_compat with nodejs_compat for Wrangler v4 ([974b566](https://github.com/wyre-technology/halopsa-mcp/commit/974b5660324131550a035d5e33656ad495dd0252))
+
 # [1.2.0](https://github.com/wyre-technology/halopsa-mcp/compare/v1.1.5...v1.2.0) (2026-03-10)
 
 
