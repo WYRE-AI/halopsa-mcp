@@ -1,3 +1,10 @@
+## [1.2.2](https://github.com/wyre-technology/halopsa-mcp/compare/v1.2.1...v1.2.2) (2026-04-06)
+
+
+### Bug Fixes
+
+* per-request MCP Server+Transport for gateway compatibility ([eafc93d](https://github.com/wyre-technology/halopsa-mcp/commit/eafc93d199d500edc76e6eb681cc7a4174add0f5))
+
 ## [1.2.1](https://github.com/wyre-technology/halopsa-mcp/compare/v1.2.0...v1.2.1) (2026-03-31)
 
 
