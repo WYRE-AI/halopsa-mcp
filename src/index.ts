@@ -24,7 +24,6 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
-import { randomUUID } from "node:crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -37,23 +36,6 @@ import { getDomainHandler, getAvailableDomains } from "./domains/index.js";
 import { isDomainName, type DomainName } from "./utils/types.js";
 import { getCredentials } from "./utils/client.js";
 import { setServerRef } from "./utils/server-ref.js";
-
-// Server state
-let currentDomain: DomainName | null = null;
-
-// Create the MCP server
-const server = new Server(
-  {
-    name: "halopsa-mcp",
-    version: "1.0.0",
-  },
-  {
-    capabilities: {
-      tools: {},
-    },
-  }
-);
-setServerRef(server);
 
 /**
  * Navigation tool - always available
@@ -102,151 +84,158 @@ const statusTool: Tool = {
 };
 
 /**
- * Get tools based on current navigation state
+ * Create a fresh MCP server instance with all handlers registered.
+ * Called once for stdio, or per-request for HTTP transport.
  */
-async function getToolsForState(): Promise<Tool[]> {
-  // Always include status tool
-  const tools: Tool[] = [statusTool];
+function createMcpServer(): Server {
+  let currentDomain: DomainName | null = null;
 
-  if (currentDomain === null) {
-    // At the root - show navigation tool
-    tools.unshift(navigateTool);
-  } else {
-    // In a domain - show back tool and domain-specific tools
-    tools.unshift(backTool);
-
-    const handler = await getDomainHandler(currentDomain);
-    const domainTools = handler.getTools();
-    tools.push(...domainTools);
-  }
-
-  return tools;
-}
-
-// Handle ListTools requests
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  const tools = await getToolsForState();
-  return { tools };
-});
-
-// Handle CallTool requests
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
-
-  try {
-    // Handle navigation
-    if (name === "halopsa_navigate") {
-      const domain = (args as { domain: string }).domain;
-
-      if (!isDomainName(domain)) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Invalid domain: ${domain}. Available domains: ${getAvailableDomains().join(", ")}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      // Check credentials before navigating
-      const creds = getCredentials();
-      if (!creds) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: No API credentials configured. Please set HALOPSA_CLIENT_ID, HALOPSA_CLIENT_SECRET, and either HALOPSA_TENANT or HALOPSA_BASE_URL environment variables.",
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      currentDomain = domain;
-
-      // Get tools for the new domain
-      const handler = await getDomainHandler(domain);
-      const domainTools = handler.getTools();
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Navigated to ${domain} domain.\n\nAvailable tools:\n${domainTools
-              .map((t) => `- ${t.name}: ${t.description}`)
-              .join("\n")}\n\nUse halopsa_back to return to the main menu.`,
-          },
-        ],
-      };
+  const server = new Server(
+    {
+      name: "halopsa-mcp",
+      version: "1.0.0",
+    },
+    {
+      capabilities: {
+        tools: {},
+      },
     }
+  );
+  setServerRef(server);
 
-    // Handle back navigation
-    if (name === "halopsa_back") {
-      const previousDomain = currentDomain;
-      currentDomain = null;
+  async function getToolsForState(): Promise<Tool[]> {
+    const tools: Tool[] = [statusTool];
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Navigated back from ${previousDomain || "root"} to the main menu.\n\nAvailable domains: ${getAvailableDomains().join(", ")}\n\nUse halopsa_navigate to select a domain.`,
-          },
-        ],
-      };
-    }
-
-    // Handle status
-    if (name === "halopsa_status") {
-      const creds = getCredentials();
-      const credStatus = creds
-        ? `Configured (tenant: ${creds.tenant || creds.baseUrl})`
-        : "NOT CONFIGURED - Please set environment variables";
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `HaloPSA MCP Server Status\n\nCurrent domain: ${currentDomain || "(none - at main menu)"}\nCredentials: ${credStatus}\nAvailable domains: ${getAvailableDomains().join(", ")}`,
-          },
-        ],
-      };
-    }
-
-    // Handle domain-specific tools
-    if (currentDomain !== null) {
+    if (currentDomain === null) {
+      tools.unshift(navigateTool);
+    } else {
+      tools.unshift(backTool);
       const handler = await getDomainHandler(currentDomain);
-
-      // Check if the tool belongs to this domain
       const domainTools = handler.getTools();
-      const toolExists = domainTools.some((t) => t.name === name);
-
-      if (toolExists) {
-        return await handler.handleCall(name, args as Record<string, unknown>);
-      }
+      tools.push(...domainTools);
     }
 
-    // Tool not found
-    return {
-      content: [
-        {
-          type: "text",
-          text: currentDomain
-            ? `Unknown tool: ${name}. You are currently in the ${currentDomain} domain. Use halopsa_back to return to the main menu.`
-            : `Unknown tool: ${name}. Use halopsa_navigate to select a domain first.`,
-        },
-      ],
-      isError: true,
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return {
-      content: [{ type: "text", text: `Error: ${message}` }],
-      isError: true,
-    };
+    return tools;
   }
-});
+
+  // Handle ListTools requests
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const tools = await getToolsForState();
+    return { tools };
+  });
+
+  // Handle CallTool requests
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
+
+    try {
+      if (name === "halopsa_navigate") {
+        const domain = (args as { domain: string }).domain;
+
+        if (!isDomainName(domain)) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Invalid domain: ${domain}. Available domains: ${getAvailableDomains().join(", ")}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const creds = getCredentials();
+        if (!creds) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: No API credentials configured. Please set HALOPSA_CLIENT_ID, HALOPSA_CLIENT_SECRET, and either HALOPSA_TENANT or HALOPSA_BASE_URL environment variables.",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        currentDomain = domain;
+
+        const handler = await getDomainHandler(domain);
+        const domainTools = handler.getTools();
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Navigated to ${domain} domain.\n\nAvailable tools:\n${domainTools
+                .map((t) => `- ${t.name}: ${t.description}`)
+                .join("\n")}\n\nUse halopsa_back to return to the main menu.`,
+            },
+          ],
+        };
+      }
+
+      if (name === "halopsa_back") {
+        const previousDomain = currentDomain;
+        currentDomain = null;
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Navigated back from ${previousDomain || "root"} to the main menu.\n\nAvailable domains: ${getAvailableDomains().join(", ")}\n\nUse halopsa_navigate to select a domain.`,
+            },
+          ],
+        };
+      }
+
+      if (name === "halopsa_status") {
+        const creds = getCredentials();
+        const credStatus = creds
+          ? `Configured (tenant: ${creds.tenant || creds.baseUrl})`
+          : "NOT CONFIGURED - Please set environment variables";
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `HaloPSA MCP Server Status\n\nCurrent domain: ${currentDomain || "(none - at main menu)"}\nCredentials: ${credStatus}\nAvailable domains: ${getAvailableDomains().join(", ")}`,
+            },
+          ],
+        };
+      }
+
+      if (currentDomain !== null) {
+        const handler = await getDomainHandler(currentDomain);
+        const domainTools = handler.getTools();
+        const toolExists = domainTools.some((t) => t.name === name);
+
+        if (toolExists) {
+          return await handler.handleCall(name, args as Record<string, unknown>);
+        }
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: currentDomain
+              ? `Unknown tool: ${name}. You are currently in the ${currentDomain} domain. Use halopsa_back to return to the main menu.`
+              : `Unknown tool: ${name}. Use halopsa_navigate to select a domain first.`,
+          },
+        ],
+        isError: true,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{ type: "text", text: `Error: ${message}` }],
+        isError: true,
+      };
+    }
+  });
+
+  return server;
+}
 
 /**
  * Extract gateway credentials from HTTP request headers and set them as
@@ -278,17 +267,13 @@ function applyGatewayCredentials(req: IncomingMessage): boolean {
 }
 
 /**
- * Start the server with HTTP Streamable transport
+ * Start the server with HTTP Streamable transport.
+ * Each request gets a fresh Server + Transport (stateless).
  */
 async function startHttpTransport(): Promise<void> {
   const port = parseInt(process.env.MCP_HTTP_PORT || "8080", 10);
   const host = process.env.MCP_HTTP_HOST || "0.0.0.0";
   const isGatewayMode = process.env.AUTH_MODE === "gateway";
-
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => randomUUID(),
-    enableJsonResponse: true,
-  });
 
   const httpServer = createServer(
     (req: IncomingMessage, res: ServerResponse) => {
@@ -313,7 +298,6 @@ async function startHttpTransport(): Promise<void> {
 
       // MCP endpoint
       if (url.pathname === "/mcp") {
-        // In gateway mode, extract credentials from headers
         if (isGatewayMode) {
           const valid = applyGatewayCredentials(req);
           if (!valid) {
@@ -330,7 +314,21 @@ async function startHttpTransport(): Promise<void> {
           }
         }
 
-        transport.handleRequest(req, res);
+        // Create fresh server + transport per request (stateless)
+        const server = createMcpServer();
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: undefined,
+          enableJsonResponse: true,
+        });
+
+        res.on("close", () => {
+          transport.close();
+          server.close();
+        });
+
+        server.connect(transport).then(() => {
+          transport.handleRequest(req, res);
+        });
         return;
       }
 
@@ -341,8 +339,6 @@ async function startHttpTransport(): Promise<void> {
       );
     }
   );
-
-  await server.connect(transport);
 
   await new Promise<void>((resolve) => {
     httpServer.listen(port, host, () => {
@@ -361,7 +357,6 @@ async function startHttpTransport(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       httpServer.close((err) => (err ? reject(err) : resolve()));
     });
-    await server.close();
     process.exit(0);
   };
 
@@ -373,6 +368,7 @@ async function startHttpTransport(): Promise<void> {
  * Start the server with stdio transport (default)
  */
 async function startStdioTransport(): Promise<void> {
+  const server = createMcpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("HaloPSA MCP server running on stdio (decision tree mode)");
