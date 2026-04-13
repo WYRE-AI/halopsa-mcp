@@ -1,10 +1,14 @@
 /**
- * Lazy-loaded HaloPSA client
+ * Lazy-loaded HaloPSA client with per-request credential isolation.
  *
- * This module provides lazy initialization of the HaloPSA client
- * to avoid loading the entire library upfront.
+ * In gateway (HTTP) mode, each inbound request stores its credentials in
+ * AsyncLocalStorage so concurrent requests never share or overwrite each
+ * other's credentials via process.env.
+ *
+ * In stdio mode the client falls back to environment variables as before.
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { HaloPsaClient } from "@wyre-technology/node-halopsa";
 
 export interface HaloPsaCredentials {
@@ -14,13 +18,35 @@ export interface HaloPsaCredentials {
   baseUrl?: string;
 }
 
-let _client: HaloPsaClient | null = null;
-let _credentials: HaloPsaCredentials | null = null;
+/**
+ * Per-request credential store.
+ * Gateway HTTP handler calls `runWithCredentials` to bind credentials
+ * to the current async context.
+ */
+export const credentialStore = new AsyncLocalStorage<HaloPsaCredentials>();
 
 /**
- * Get credentials from environment variables
+ * Run a callback with per-request credentials bound to the async context.
+ */
+export function runWithCredentials<T>(
+  creds: HaloPsaCredentials,
+  fn: () => T
+): T {
+  return credentialStore.run(creds, fn);
+}
+
+/**
+ * Get credentials — first from AsyncLocalStorage (gateway mode),
+ * then from environment variables (stdio / env mode).
  */
 export function getCredentials(): HaloPsaCredentials | null {
+  // Prefer per-request credentials from async context
+  const perRequest = credentialStore.getStore();
+  if (perRequest) {
+    return perRequest;
+  }
+
+  // Fall back to environment variables
   const clientId = process.env.HALOPSA_CLIENT_ID;
   const clientSecret = process.env.HALOPSA_CLIENT_SECRET;
   const tenant = process.env.HALOPSA_TENANT;
@@ -39,7 +65,18 @@ export function getCredentials(): HaloPsaCredentials | null {
 }
 
 /**
- * Get or create the HaloPSA client (lazy initialization)
+ * Client cache keyed by credential fingerprint so different tenants
+ * get separate client instances, but the same tenant reuses its client.
+ */
+const clientCache = new Map<string, HaloPsaClient>();
+
+function credentialKey(creds: HaloPsaCredentials): string {
+  return `${creds.clientId}:${creds.tenant ?? ""}:${creds.baseUrl ?? ""}`;
+}
+
+/**
+ * Get or create the HaloPSA client (lazy initialization).
+ * Uses the current request's credentials (AsyncLocalStorage) or env vars.
  */
 export async function getClient(): Promise<HaloPsaClient> {
   const creds = getCredentials();
@@ -50,37 +87,26 @@ export async function getClient(): Promise<HaloPsaClient> {
     );
   }
 
-  // If credentials changed, invalidate the cached client
-  if (
-    _client &&
-    _credentials &&
-    (creds.clientId !== _credentials.clientId ||
-      creds.clientSecret !== _credentials.clientSecret ||
-      creds.tenant !== _credentials.tenant ||
-      creds.baseUrl !== _credentials.baseUrl)
-  ) {
-    _client = null;
-  }
+  const key = credentialKey(creds);
+  let client = clientCache.get(key);
 
-  if (!_client) {
-    // Lazy import the library
+  if (!client) {
     const { HaloPsaClient } = await import("@wyre-technology/node-halopsa");
-    _client = new HaloPsaClient({
+    client = new HaloPsaClient({
       clientId: creds.clientId,
       clientSecret: creds.clientSecret,
       tenant: creds.tenant,
       baseUrl: creds.baseUrl,
     });
-    _credentials = creds;
+    clientCache.set(key, client);
   }
 
-  return _client;
+  return client;
 }
 
 /**
- * Clear the cached client (useful for testing)
+ * Clear all cached clients (useful for testing)
  */
 export function clearClient(): void {
-  _client = null;
-  _credentials = null;
+  clientCache.clear();
 }

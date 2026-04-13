@@ -34,7 +34,11 @@ import {
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { getDomainHandler, getAvailableDomains } from "./domains/index.js";
 import { isDomainName, type DomainName } from "./utils/types.js";
-import { getCredentials } from "./utils/client.js";
+import {
+  getCredentials,
+  runWithCredentials,
+  type HaloPsaCredentials,
+} from "./utils/client.js";
 import { setServerRef } from "./utils/server-ref.js";
 
 /**
@@ -238,10 +242,13 @@ function createMcpServer(): Server {
 }
 
 /**
- * Extract gateway credentials from HTTP request headers and set them as
- * environment variables so the lazy-loaded HaloPSA client picks them up.
+ * Extract gateway credentials from HTTP request headers.
+ * Returns the credentials object or null if required headers are missing.
+ * Does NOT mutate process.env — credentials are bound per-request via AsyncLocalStorage.
  */
-function applyGatewayCredentials(req: IncomingMessage): boolean {
+function extractGatewayCredentials(
+  req: IncomingMessage
+): HaloPsaCredentials | null {
   const clientId = req.headers["x-halo-client-id"] as string | undefined;
   const clientSecret = req.headers["x-halo-client-secret"] as
     | string
@@ -250,20 +257,10 @@ function applyGatewayCredentials(req: IncomingMessage): boolean {
   const baseUrl = req.headers["x-halo-base-url"] as string | undefined;
 
   if (!clientId || !clientSecret) {
-    return false;
+    return null;
   }
 
-  process.env.HALOPSA_CLIENT_ID = clientId;
-  process.env.HALOPSA_CLIENT_SECRET = clientSecret;
-
-  if (tenant) {
-    process.env.HALOPSA_TENANT = tenant;
-  }
-  if (baseUrl) {
-    process.env.HALOPSA_BASE_URL = baseUrl;
-  }
-
-  return true;
+  return { clientId, clientSecret, tenant, baseUrl };
 }
 
 /**
@@ -298,9 +295,28 @@ async function startHttpTransport(): Promise<void> {
 
       // MCP endpoint
       if (url.pathname === "/mcp") {
+        // In gateway mode, extract credentials and bind them to the
+        // request's async context — no process.env mutation.
+        const handleMcp = () => {
+          const server = createMcpServer();
+          const transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: undefined,
+            enableJsonResponse: true,
+          });
+
+          res.on("close", () => {
+            transport.close();
+            server.close();
+          });
+
+          server.connect(transport).then(() => {
+            transport.handleRequest(req, res);
+          });
+        };
+
         if (isGatewayMode) {
-          const valid = applyGatewayCredentials(req);
-          if (!valid) {
+          const creds = extractGatewayCredentials(req);
+          if (!creds) {
             res.writeHead(401, { "Content-Type": "application/json" });
             res.end(
               JSON.stringify({
@@ -312,23 +328,10 @@ async function startHttpTransport(): Promise<void> {
             );
             return;
           }
+          runWithCredentials(creds, handleMcp);
+        } else {
+          handleMcp();
         }
-
-        // Create fresh server + transport per request (stateless)
-        const server = createMcpServer();
-        const transport = new StreamableHTTPServerTransport({
-          sessionIdGenerator: undefined,
-          enableJsonResponse: true,
-        });
-
-        res.on("close", () => {
-          transport.close();
-          server.close();
-        });
-
-        server.connect(transport).then(() => {
-          transport.handleRequest(req, res);
-        });
         return;
       }
 
