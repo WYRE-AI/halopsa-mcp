@@ -40,6 +40,7 @@ import {
   type HaloPsaCredentials,
 } from "./utils/client.js";
 import { setServerRef } from "./utils/server-ref.js";
+import { registerPromptHandlers } from "./prompts.js";
 
 /**
  * Navigation tool - always available
@@ -102,10 +103,12 @@ function createMcpServer(): Server {
     {
       capabilities: {
         tools: {},
+        prompts: {},
       },
     }
   );
   setServerRef(server);
+  registerPromptHandlers(server);
 
   async function getToolsForState(): Promise<Tool[]> {
     const tools: Tool[] = [statusTool];
