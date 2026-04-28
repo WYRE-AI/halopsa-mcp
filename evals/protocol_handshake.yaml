@@ -1,0 +1,19 @@
+name: halopsa-mcp boots over stdio and lists tools
+server:
+  command: node
+  args: [dist/index.js]
+  env:
+    MCP_TRANSPORT: "stdio"
+    AUTH_MODE: "static"
+    HALOPSA_BASE_URL: ""
+    HALOPSA_CLIENT_ID: ""
+    HALOPSA_CLIENT_SECRET: ""
+    HALOPSA_TENANT: ""
+assert:
+  list_tools:
+    expect:
+      contains_tools:
+        - halopsa_agents_list
+        - halopsa_clients_list
+        - halopsa_assets_list
+timeout: 30s
