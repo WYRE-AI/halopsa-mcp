@@ -9,6 +9,7 @@ COPY . .
 RUN npm run build
 
 FROM node:22-alpine AS runner
+LABEL io.modelcontextprotocol.server.name="io.github.wyre-technology/halopsa-mcp"
 WORKDIR /app
 ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs && \
