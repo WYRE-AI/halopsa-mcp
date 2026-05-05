@@ -16,30 +16,24 @@ function getTools(): Tool[] {
   return [
     {
       name: "halopsa_tickets_list",
-      description:
-        "List tickets in HaloPSA. Can filter by client, status, or open/closed state.",
+      description: "List tickets with optional filters by client, status, agent, or open/closed state",
       inputSchema: {
         type: "object" as const,
         properties: {
           client_id: {
             type: "number",
-            description: "Filter tickets by client ID",
           },
           status_id: {
             type: "number",
-            description: "Filter tickets by status ID",
           },
           agent_id: {
             type: "number",
-            description: "Filter tickets by assigned agent ID",
           },
           open_only: {
             type: "boolean",
-            description: "Show only open tickets",
           },
           closed_only: {
             type: "boolean",
-            description: "Show only closed tickets",
           },
           limit: {
             type: "number",
@@ -50,17 +44,16 @@ function getTools(): Tool[] {
     },
     {
       name: "halopsa_tickets_get",
-      description: "Get details for a specific ticket by its ID",
+      description: "Get ticket details by ID",
       inputSchema: {
         type: "object" as const,
         properties: {
           ticket_id: {
             type: "number",
-            description: "The ticket ID",
           },
           include_actions: {
             type: "boolean",
-            description: "Include ticket actions/notes in the response",
+            description: "Include actions/notes",
           },
         },
         required: ["ticket_id"],
@@ -68,37 +61,30 @@ function getTools(): Tool[] {
     },
     {
       name: "halopsa_tickets_create",
-      description: "Create a new ticket in HaloPSA",
+      description: "Create ticket",
       inputSchema: {
         type: "object" as const,
         properties: {
           summary: {
             type: "string",
-            description: "Ticket summary/title",
           },
           details: {
             type: "string",
-            description: "Ticket description/details",
           },
           client_id: {
             type: "number",
-            description: "Client ID for the ticket",
           },
           tickettype_id: {
             type: "number",
-            description: "Ticket type ID",
           },
           priority_id: {
             type: "number",
-            description: "Priority ID",
           },
           agent_id: {
             type: "number",
-            description: "Assigned agent ID",
           },
           site_id: {
             type: "number",
-            description: "Site ID",
           },
         },
         required: ["summary", "client_id", "tickettype_id"],
@@ -106,33 +92,27 @@ function getTools(): Tool[] {
     },
     {
       name: "halopsa_tickets_update",
-      description: "Update an existing ticket in HaloPSA",
+      description: "Update ticket",
       inputSchema: {
         type: "object" as const,
         properties: {
           ticket_id: {
             type: "number",
-            description: "The ticket ID to update",
           },
           summary: {
             type: "string",
-            description: "New ticket summary",
           },
           details: {
             type: "string",
-            description: "New ticket details",
           },
           status_id: {
             type: "number",
-            description: "New status ID",
           },
           priority_id: {
             type: "number",
-            description: "New priority ID",
           },
           agent_id: {
             type: "number",
-            description: "New assigned agent ID",
           },
         },
         required: ["ticket_id"],
@@ -140,29 +120,25 @@ function getTools(): Tool[] {
     },
     {
       name: "halopsa_tickets_add_action",
-      description: "Add an action (note) to a ticket",
+      description: "Add note to ticket",
       inputSchema: {
         type: "object" as const,
         properties: {
           ticket_id: {
             type: "number",
-            description: "The ticket ID to add the action to",
           },
           note: {
             type: "string",
-            description: "The note/action text",
           },
           outcome: {
             type: "string",
-            description: "Action outcome",
           },
           timetaken: {
             type: "number",
-            description: "Time taken in minutes",
+            description: "Minutes",
           },
           hidden_from_user: {
             type: "boolean",
-            description: "Hide this note from the end user",
           },
         },
         required: ["ticket_id", "note"],

@@ -15,33 +15,29 @@ function getTools(): Tool[] {
   return [
     {
       name: "halopsa_invoices_list",
-      description: "List invoices in HaloPSA",
+      description: "List invoices with optional filters by client, status, or date range",
       inputSchema: {
         type: "object" as const,
         properties: {
           client_id: {
             type: "number",
-            description: "Filter invoices by client ID",
           },
           status: {
             type: "string",
-            description: "Filter by invoice status",
           },
           sent: {
             type: "boolean",
-            description: "Filter by sent status",
           },
           paid: {
             type: "boolean",
-            description: "Filter by paid status",
           },
           invoice_date_start: {
             type: "string",
-            description: "Filter by invoice date start (YYYY-MM-DD)",
+            description: "YYYY-MM-DD",
           },
           invoice_date_end: {
             type: "string",
-            description: "Filter by invoice date end (YYYY-MM-DD)",
+            description: "YYYY-MM-DD",
           },
           limit: {
             type: "number",
@@ -52,13 +48,12 @@ function getTools(): Tool[] {
     },
     {
       name: "halopsa_invoices_get",
-      description: "Get details for a specific invoice by ID",
+      description: "Get invoice details by ID",
       inputSchema: {
         type: "object" as const,
         properties: {
           invoice_id: {
             type: "number",
-            description: "The invoice ID",
           },
         },
         required: ["invoice_id"],
