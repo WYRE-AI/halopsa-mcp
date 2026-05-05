@@ -48,15 +48,13 @@ import { registerPromptHandlers } from "./prompts.js";
 const navigateTool: Tool = {
   name: "halopsa_navigate",
   description:
-    "Navigate to a HaloPSA domain to access its tools. Available domains: tickets (manage support tickets), clients (manage companies), assets (manage configuration items), agents (manage technicians/users), invoices (view billing).",
+    "Navigate to HaloPSA domain to access its tools. Available: tickets, clients, assets, agents, invoices.",
   inputSchema: {
     type: "object",
     properties: {
       domain: {
         type: "string",
         enum: getAvailableDomains(),
-        description:
-          "The domain to navigate to. Choose: tickets, clients, assets, agents, or invoices",
       },
     },
     required: ["domain"],
@@ -68,7 +66,7 @@ const navigateTool: Tool = {
  */
 const backTool: Tool = {
   name: "halopsa_back",
-  description: "Navigate back to the main menu to select a different domain",
+  description: "Navigate back to main menu to select different domain",
   inputSchema: {
     type: "object",
     properties: {},
@@ -80,8 +78,7 @@ const backTool: Tool = {
  */
 const statusTool: Tool = {
   name: "halopsa_status",
-  description:
-    "Show current navigation state and available domains. Also verifies API credentials are configured.",
+  description: "Show current domain and credentials status",
   inputSchema: {
     type: "object",
     properties: {},

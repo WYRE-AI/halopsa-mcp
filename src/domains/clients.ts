@@ -16,17 +16,16 @@ function getTools(): Tool[] {
   return [
     {
       name: "halopsa_clients_list",
-      description: "List clients (companies) in HaloPSA",
+      description: "List companies",
       inputSchema: {
         type: "object" as const,
         properties: {
           search: {
             type: "string",
-            description: "Search term to filter clients",
           },
           inactive: {
             type: "boolean",
-            description: "Include inactive clients",
+            description: "Include inactive",
           },
           limit: {
             type: "number",
@@ -37,13 +36,12 @@ function getTools(): Tool[] {
     },
     {
       name: "halopsa_clients_get",
-      description: "Get details for a specific client by ID",
+      description: "Get company details by ID",
       inputSchema: {
         type: "object" as const,
         properties: {
           client_id: {
             type: "number",
-            description: "The client ID",
           },
         },
         required: ["client_id"],
@@ -51,29 +49,24 @@ function getTools(): Tool[] {
     },
     {
       name: "halopsa_clients_create",
-      description: "Create a new client in HaloPSA",
+      description: "Create company",
       inputSchema: {
         type: "object" as const,
         properties: {
           name: {
             type: "string",
-            description: "Client/company name",
           },
           website: {
             type: "string",
-            description: "Company website URL",
           },
           phonenumber: {
             type: "string",
-            description: "Phone number",
           },
           email: {
             type: "string",
-            description: "Primary email address",
           },
           notes: {
             type: "string",
-            description: "Additional notes",
           },
         },
         required: ["name"],
@@ -81,13 +74,12 @@ function getTools(): Tool[] {
     },
     {
       name: "halopsa_clients_search",
-      description: "Search for clients by name or other criteria",
+      description: "Search companies by name",
       inputSchema: {
         type: "object" as const,
         properties: {
           query: {
             type: "string",
-            description: "Search query",
           },
           limit: {
             type: "number",

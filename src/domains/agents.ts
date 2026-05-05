@@ -15,17 +15,16 @@ function getTools(): Tool[] {
   return [
     {
       name: "halopsa_agents_list",
-      description: "List agents (technicians) in HaloPSA",
+      description: "List technicians",
       inputSchema: {
         type: "object" as const,
         properties: {
           team_id: {
             type: "number",
-            description: "Filter agents by team ID",
           },
           inactive: {
             type: "boolean",
-            description: "Include inactive agents",
+            description: "Include inactive",
           },
           limit: {
             type: "number",
@@ -36,13 +35,12 @@ function getTools(): Tool[] {
     },
     {
       name: "halopsa_agents_get",
-      description: "Get details for a specific agent by ID",
+      description: "Get technician details by ID",
       inputSchema: {
         type: "object" as const,
         properties: {
           agent_id: {
             type: "number",
-            description: "The agent ID",
           },
         },
         required: ["agent_id"],
@@ -50,7 +48,7 @@ function getTools(): Tool[] {
     },
     {
       name: "halopsa_teams_list",
-      description: "List teams in HaloPSA",
+      description: "List teams",
       inputSchema: {
         type: "object" as const,
         properties: {

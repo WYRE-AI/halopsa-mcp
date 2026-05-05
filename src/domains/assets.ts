@@ -15,25 +15,22 @@ function getTools(): Tool[] {
   return [
     {
       name: "halopsa_assets_list",
-      description: "List assets (configuration items) in HaloPSA",
+      description: "List configuration items with optional filters",
       inputSchema: {
         type: "object" as const,
         properties: {
           client_id: {
             type: "number",
-            description: "Filter assets by client ID",
           },
           site_id: {
             type: "number",
-            description: "Filter assets by site ID",
           },
           assettype_id: {
             type: "number",
-            description: "Filter assets by asset type ID",
           },
           inactive: {
             type: "boolean",
-            description: "Include inactive assets",
+            description: "Include inactive",
           },
           limit: {
             type: "number",
@@ -44,13 +41,12 @@ function getTools(): Tool[] {
     },
     {
       name: "halopsa_assets_get",
-      description: "Get details for a specific asset by ID",
+      description: "Get asset details by ID",
       inputSchema: {
         type: "object" as const,
         properties: {
           asset_id: {
             type: "number",
-            description: "The asset ID",
           },
         },
         required: ["asset_id"],
@@ -58,17 +54,15 @@ function getTools(): Tool[] {
     },
     {
       name: "halopsa_assets_search",
-      description: "Search for assets by keyword",
+      description: "Search assets by inventory number and key fields",
       inputSchema: {
         type: "object" as const,
         properties: {
           query: {
             type: "string",
-            description: "Search query (matches inventory number, key fields)",
           },
           client_id: {
             type: "number",
-            description: "Optionally filter by client ID",
           },
           limit: {
             type: "number",
@@ -80,7 +74,7 @@ function getTools(): Tool[] {
     },
     {
       name: "halopsa_assets_list_types",
-      description: "List available asset types",
+      description: "List asset types",
       inputSchema: {
         type: "object" as const,
         properties: {
