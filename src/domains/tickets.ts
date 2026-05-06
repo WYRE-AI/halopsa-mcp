@@ -16,7 +16,7 @@ function getTools(): Tool[] {
   return [
     {
       name: "halopsa_tickets_list",
-      description: "List tickets with optional filters by client, status, agent, or open/closed state",
+      description: "List tickets with optional filters by client, status, agent, open/closed state, or date occurred range",
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -35,9 +35,21 @@ function getTools(): Tool[] {
           closed_only: {
             type: "boolean",
           },
+          dateoccurred_start: {
+            type: "string",
+            description: "ISO-8601 start date for tickets (e.g. 2026-04-06T00:00:00Z)",
+          },
+          dateoccurred_end: {
+            type: "string",
+            description: "ISO-8601 end date for tickets",
+          },
           limit: {
             type: "number",
             description: "Maximum number of results (default: 50)",
+          },
+          page_no: {
+            type: "number",
+            description: "Page number (1-indexed) for pagination",
           },
         },
       },
@@ -159,13 +171,16 @@ async function handleCall(
   switch (toolName) {
     case "halopsa_tickets_list": {
       const limit = (args.limit as number) || 50;
+      const pageNo = args.page_no as number | undefined;
+      const dateStart = args.dateoccurred_start as string | undefined;
+      const dateEnd = args.dateoccurred_end as string | undefined;
       let openOnly = args.open_only as boolean | undefined;
       let closedOnly = args.closed_only as boolean | undefined;
 
-      // If no filters provided, elicit a date range from the user
       const hasFilters =
         args.client_id || args.status_id || args.agent_id ||
-        args.open_only !== undefined || args.closed_only !== undefined;
+        args.open_only !== undefined || args.closed_only !== undefined ||
+        dateStart || dateEnd;
 
       if (!hasFilters) {
         const selection = await elicitSelection(
@@ -183,8 +198,6 @@ async function handleCall(
         if (selection === "open") {
           openOnly = true;
         }
-        // Note: HaloPSA list API may not support date filtering directly,
-        // so we use open_only as the primary elicited filter
       }
 
       const response = await client.tickets.list({
@@ -193,7 +206,10 @@ async function handleCall(
         agent_id: args.agent_id as number | undefined,
         open_only: openOnly,
         closed_only: closedOnly,
+        dateoccurred_start: dateStart,
+        dateoccurred_end: dateEnd,
         pageSize: limit,
+        pageNo: pageNo,
       });
 
       return {
