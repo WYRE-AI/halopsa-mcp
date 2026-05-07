@@ -55,23 +55,35 @@ jobs:
           echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
       - run: npm install
       - run: npm run build
+      - name: Capture latest tag before release
+        id: pre
+        run: |
+          TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - name: Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx semantic-release
 
-      - name: Get released version
+      # `released=true` ONLY when semantic-release actually cut a new tag.
+      # Compare latest tag before/after — robust against package.json drift
+      # caused by branch protection blocking the @semantic-release/git push.
+      - name: Detect new release
         id: version
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRE_TAG: ${{ steps.pre.outputs.tag }}
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          if gh release view "v$VERSION" --repo ${{ github.repository }} &>/dev/null; then
-            echo "released=true" >> $GITHUB_OUTPUT
+          git fetch --tags --force
+          LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
+          if [ "$LATEST" != "$PRE_TAG" ] && [ "$LATEST" != "none" ]; then
+            echo "version=${LATEST#v}" >> "$GITHUB_OUTPUT"
+            echo "released=true" >> "$GITHUB_OUTPUT"
+            echo "New release: $LATEST (was $PRE_TAG)"
           else
-            echo "released=false" >> $GITHUB_OUTPUT
+            echo "version=" >> "$GITHUB_OUTPUT"
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            echo "No new release (still at $LATEST)"
           fi
 
       - name: Pack and upload MCPB bundle
@@ -125,25 +137,31 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
-      - name: Resolve release version
-        id: version
+      - name: Compute image tags
+        id: tags
         env:
           RELEASE_VERSION: ${{ needs.release.outputs.version }}
+          RELEASED: ${{ needs.release.outputs.released }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
         run: |
-          if [ -z "$RELEASE_VERSION" ]; then
-            echo "ERROR: needs.release.outputs.version is empty" >&2
-            exit 1
-          fi
-          echo "version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          SHORT_SHA="${SHA:0:7}"
+          {
+            echo "tags<<EOF"
+            echo "ghcr.io/${REPO}:latest"
+            echo "ghcr.io/${REPO}:sha-${SHORT_SHA}"
+            if [ "$RELEASED" = "true" ] && [ -n "$RELEASE_VERSION" ]; then
+              echo "ghcr.io/${REPO}:v${RELEASE_VERSION}"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
       - name: Build and push
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
         with:
           context: .
           platforms: linux/amd64
           push: true
-          tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:v${{ steps.version.outputs.version }}
+          tags: ${{ steps.tags.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
