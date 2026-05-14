@@ -5,13 +5,9 @@
  * It handles incoming HTTP requests and routes them to the appropriate handlers.
  */
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+// MCP SDK imports intentionally omitted — the Workers transport adapter
+// is not yet wired (this file currently returns 501 for /mcp). Re-add the
+// imports when the SDK Workers adapter lands.
 
 export interface Env {
   HALOPSA_CLIENT_ID: string;

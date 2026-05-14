@@ -175,7 +175,7 @@ async function handleCall(
       const dateStart = args.dateoccurred_start as string | undefined;
       const dateEnd = args.dateoccurred_end as string | undefined;
       let openOnly = args.open_only as boolean | undefined;
-      let closedOnly = args.closed_only as boolean | undefined;
+      const closedOnly = args.closed_only as boolean | undefined;
 
       const hasFilters =
         args.client_id || args.status_id || args.agent_id ||
