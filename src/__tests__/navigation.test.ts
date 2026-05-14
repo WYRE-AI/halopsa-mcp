@@ -194,8 +194,8 @@ describe("Domain Navigation", () => {
 
   describe("clearDomainCache", () => {
     it("should clear the cached handlers", async () => {
-      // Load a handler to cache it
-      const handler1 = await getDomainHandler("tickets");
+      // Load a handler to cache it (return value not asserted — only the side-effect matters)
+      const _handler1 = await getDomainHandler("tickets");
 
       // Clear cache
       clearDomainCache();
