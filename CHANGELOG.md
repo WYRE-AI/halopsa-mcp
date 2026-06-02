@@ -1,3 +1,22 @@
+## [Unreleased]
+
+### Fixed
+
+- **Deploy buttons:** one-click "Deploy to Cloudflare Workers" and "Deploy to
+  DigitalOcean" builds no longer fail with `npm error 401 Unauthorized` from
+  `npm.pkg.github.com`. The `.npmrc` now reads a `read:packages` token from
+  `NODE_AUTH_TOKEN`, `.do/app.yaml` declares a `GITHUB_TOKEN` build-time secret,
+  and the README documents how operators supply their own GitHub PAT.
+- **Cloudflare Workers:** `wrangler.json` `main` now points at `src/worker.ts`
+  so Wrangler bundles the TypeScript entrypoint directly instead of a missing
+  `dist/worker.js` build artifact.
+
+### Changed
+
+- **Publishing:** the `@wyre-technology/halopsa-mcp` package is now published to
+  the GitHub Packages npm registry on release (`npmPublish: true`, with a
+  `publishConfig.registry` pointing at `https://npm.pkg.github.com`).
+
 ## [1.2.2](https://github.com/wyre-technology/halopsa-mcp/compare/v1.2.1...v1.2.2) (2026-04-06)
 
 

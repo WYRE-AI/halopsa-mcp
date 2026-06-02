@@ -18,6 +18,13 @@ spec:
         success_threshold: 1
         failure_threshold: 3
       envs:
+        # GitHub PAT (read:packages) used at build time to install the private
+        # @wyre-technology/* dependency from GitHub Packages. Passed to the
+        # Dockerfile's `ARG GITHUB_TOKEN`. Set this as an encrypted SECRET in the
+        # App Platform UI before the first deploy, or the build fails with npm 401.
+        - key: GITHUB_TOKEN
+          scope: BUILD_TIME
+          type: SECRET
         - key: HALOPSA_CLIENT_ID
           scope: RUN_TIME
           type: SECRET
