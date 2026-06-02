@@ -42,6 +42,9 @@
     "url": "https://github.com/wyre-technology/halopsa-mcp/issues"
   },
   "homepage": "https://github.com/wyre-technology/halopsa-mcp#readme",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
     "@wyre-technology/node-halopsa": "^1.0.3"
