@@ -6,205 +6,37 @@ on:
   pull_request:
     branches: [main]
 
+# Thin caller for the canonical reusable release pipeline. The build →
+# semantic-release → Docker → MCP Registry → security chain (tag-based release
+# detection + correct gating) lives in wyre-technology/.github so every *-mcp
+# repo stays in lockstep instead of drifting per-repo. PR-time lint/test gating
+# is each repo's ci.yml concern; this workflow only runs the release path.
+# Caller jobs grant the token scopes the reusable jobs request (a reusable can
+# only reduce, never expand, caller-granted scope).
 jobs:
-  test:
-    name: Test
-    # Delegated to the canonical reusable CI workflow.
-    # See: ~/.claude/skills/mcp-server-fleet-ci-template
-    uses: wyre-technology/.github/.github/workflows/mcp-server-ci.yml@198605d0575e27374cf9b67fba3aa8c7b91de2c0
-    with:
-      node-versions: '["20", "22"]'
-    secrets: inherit
-
   release:
-    name: Release
-    runs-on: ubuntu-latest
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
       issues: write
       packages: write
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      released: ${{ steps.version.outputs.released }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-      - name: Configure npm for GitHub Packages
-        run: |
-          echo "@wyre-technology:registry=https://npm.pkg.github.com" >> .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
-      - run: npm install
-      - run: npm run build
-      - name: Capture latest tag before release
-        id: pre
-        run: |
-          TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-      - name: Semantic Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx semantic-release
+      id-token: write
+      security-events: write
+    uses: wyre-technology/.github/.github/workflows/mcp-server-release.yml@7794e75666ac4956274f7a7d25dabacd56c96bbc
+    with:
+      server-name: halopsa-mcp
+      image-name: ghcr.io/wyre-technology/halopsa-mcp
+    secrets: inherit
 
-      # `released=true` ONLY when semantic-release actually cut a new tag.
-      # Compare latest tag before/after — robust against package.json drift
-      # caused by branch protection blocking the @semantic-release/git push.
-      - name: Detect new release
-        id: version
-        env:
-          PRE_TAG: ${{ steps.pre.outputs.tag }}
-        run: |
-          git fetch --tags --force
-          LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
-          if [ "$LATEST" != "$PRE_TAG" ] && [ "$LATEST" != "none" ]; then
-            echo "version=${LATEST#v}" >> "$GITHUB_OUTPUT"
-            echo "released=true" >> "$GITHUB_OUTPUT"
-            echo "New release: $LATEST (was $PRE_TAG)"
-          else
-            echo "version=" >> "$GITHUB_OUTPUT"
-            echo "released=false" >> "$GITHUB_OUTPUT"
-            echo "No new release (still at $LATEST)"
-          fi
-
-      - name: Pack and upload MCPB bundle
-        if: steps.version.outputs.released == 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          BUNDLE_NAME=$(node -p "require('./package.json').name.replace(/^@.*\//, '')")
-          npm install -g @anthropic-ai/mcpb
-          npm run pack:mcpb
-          gh release upload "v${{ steps.version.outputs.version }}" "${BUNDLE_NAME}.mcpb" \
-            --repo ${{ github.repository }} --clobber
-
-      - name: Discord release notification
-        if: false  # disabled - too noisy, re-enable later
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          BODY=$(gh release view "v$VERSION" --json body --jq '.body' 2>/dev/null || echo "")
-          SUMMARY=$(echo "$BODY" | sed '1,2d' | head -30 | cut -c1-1800)
-          DESC="**${{ github.repository }}** — [v${VERSION}](https://github.com/${{ github.repository }}/releases/tag/v${VERSION})"$'\n'"${SUMMARY}"
-          PAYLOAD=$(jq -n --arg title "New Release: v${VERSION}" --arg desc "$DESC" '{embeds: [{title: $title, description: $desc, color: 5763847}]}')
-          curl -sf -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK"
-  docker:
-    name: Docker
-    runs-on: ubuntu-latest
-    needs: [release]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      digest: ${{ steps.push.outputs.digest }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - name: Login to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Docker metadata
-        id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051  # v5.10.0
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
-      - name: Compute image tags
-        id: tags
-        env:
-          RELEASE_VERSION: ${{ needs.release.outputs.version }}
-          RELEASED: ${{ needs.release.outputs.released }}
-          REPO: ${{ github.repository }}
-          SHA: ${{ github.sha }}
-        run: |
-          SHORT_SHA="${SHA:0:7}"
-          {
-            echo "tags<<EOF"
-            echo "ghcr.io/${REPO}:latest"
-            echo "ghcr.io/${REPO}:sha-${SHORT_SHA}"
-            if [ "$RELEASED" = "true" ] && [ -n "$RELEASE_VERSION" ]; then
-              echo "ghcr.io/${REPO}:v${RELEASE_VERSION}"
-            fi
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-      - name: Build and push
-        id: push
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
-        with:
-          context: .
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.tags.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
-
-  mcp-registry:
-    name: Publish to MCP Registry
-    runs-on: ubuntu-latest
-    needs: [release, docker]
+  deploy:
+    needs: release
     if: needs.release.outputs.released == 'true'
     permissions:
       id-token: write
       contents: read
-    env:
-      VERSION: ${{ needs.release.outputs.version }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
-      - name: Install mcp-publisher
-        run: |
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" \
-            | tar xz mcp-publisher
-      - name: Stamp version into server.json
-        run: |
-          jq --arg v "$VERSION" \
-            '.version = $v | .packages[0].identifier = "ghcr.io/wyre-technology/halopsa-mcp:v" + $v' \
-            server.json > server.json.tmp
-          mv server.json.tmp server.json
-          cat server.json
-      - name: Validate server.json
-        run: ./mcp-publisher validate
-      - name: Authenticate to MCP Registry (GitHub OIDC)
-        run: ./mcp-publisher login github-oidc
-      - name: Publish to MCP Registry
-        run: ./mcp-publisher publish
-      - name: Verify registry listing
-        run: |
-          sleep 5
-          curl -sf "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.wyre-technology/halopsa-mcp" \
-            | jq '.servers[]?.server | {name, version}'
-
-  deploy:
-    name: Deploy to Azure Container Apps
-    needs: [release, docker]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      id-token: write
-      contents: read
-    uses: wyre-technology/.github/.github/workflows/mcp-server-deploy.yml@198605d0575e27374cf9b67fba3aa8c7b91de2c0
+    uses: wyre-technology/.github/.github/workflows/mcp-server-deploy.yml@7794e75666ac4956274f7a7d25dabacd56c96bbc
     with:
       vendor-slug: halopsa
       image-name: ghcr.io/wyre-technology/halopsa-mcp
-      digest: ${{ needs.docker.outputs.digest }}
+      digest: ${{ needs.release.outputs.digest }}
       version: ${{ needs.release.outputs.version }}
     secrets: inherit
