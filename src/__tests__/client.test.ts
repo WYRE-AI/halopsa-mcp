@@ -7,7 +7,7 @@ import { getCredentials, getClient, clearClient } from "../utils/client.js";
 
 // Mock the node-halopsa library
 vi.mock("@wyre-technology/node-halopsa", () => ({
-  HaloPsaClient: vi.fn().mockImplementation((config) => ({
+  HaloPsaClient: vi.fn().mockImplementation(function (config) { return ({
     config,
     tickets: {
       list: vi.fn(),
@@ -32,7 +32,7 @@ vi.mock("@wyre-technology/node-halopsa", () => ({
       list: vi.fn(),
       get: vi.fn(),
     },
-  })),
+  }) }),
 }));
 
 describe("HaloPSA Client Utilities", () => {
