@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/wyre-technology-halopsa-mcp-badge.png)](https://mseep.ai/app/wyre-technology-halopsa-mcp)
+
 # HaloPSA MCP Server
 
 A Model Context Protocol (MCP) server for interacting with HaloPSA, featuring a decision tree architecture for efficient tool loading.
