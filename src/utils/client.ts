@@ -18,6 +18,32 @@ export interface HaloPsaCredentials {
   baseUrl?: string;
 }
 
+// An unresolved MCPB/DXT manifest placeholder, e.g. "${user_config.halopsa_base_url}".
+// Desktop hosts inject the config template verbatim when its optional user_config
+// field is left blank, so the literal string arrives in the env var / header.
+const CONFIG_PLACEHOLDER = /^\$\{.*\}$/;
+
+/**
+ * Normalise a single credential value read from an env var or gateway header.
+ *
+ * Returns `undefined` for values that are effectively absent, so the auth layer
+ * treats them as "no value" rather than a real setting:
+ *   - undefined / empty / whitespace-only
+ *   - an unresolved manifest placeholder like `${user_config.halopsa_base_url}`
+ *
+ * Root cause of issue #73: leaving the optional Base URL field blank left the
+ * literal `${user_config.halopsa_base_url}` in HALOPSA_BASE_URL. That string is
+ * truthy, so the `!tenant && !baseUrl` guard was defeated and the placeholder was
+ * passed to the SDK, which took the baseUrl branch and threw on
+ * `new URL("${user_config.halopsa_base_url}")` — breaking even a correct
+ * tenant-only setup. Stripping the placeholder here lets the tenant path resolve.
+ */
+export function cleanCredential(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed || CONFIG_PLACEHOLDER.test(trimmed)) return undefined;
+  return trimmed;
+}
+
 /**
  * Per-request credential store.
  * Gateway HTTP handler calls `runWithCredentials` to bind credentials
@@ -46,11 +72,12 @@ export function getCredentials(): HaloPsaCredentials | null {
     return perRequest;
   }
 
-  // Fall back to environment variables
+  // Fall back to environment variables. tenant/baseUrl are cleaned so an
+  // unresolved MCPB placeholder from a blank optional field is treated as absent.
   const clientId = process.env.HALOPSA_CLIENT_ID;
   const clientSecret = process.env.HALOPSA_CLIENT_SECRET;
-  const tenant = process.env.HALOPSA_TENANT;
-  const baseUrl = process.env.HALOPSA_BASE_URL;
+  const tenant = cleanCredential(process.env.HALOPSA_TENANT);
+  const baseUrl = cleanCredential(process.env.HALOPSA_BASE_URL);
 
   if (!clientId || !clientSecret) {
     return null;
