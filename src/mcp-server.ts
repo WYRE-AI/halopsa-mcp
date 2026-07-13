@@ -21,6 +21,7 @@ import { getDomainHandler, getAvailableDomains } from "./domains/index.js";
 import { isDomainName, type DomainName } from "./utils/types.js";
 import {
   getCredentials,
+  cleanCredential,
   type HaloPsaCredentials,
 } from "./utils/client.js";
 import { setServerRef } from "./utils/server-ref.js";
@@ -142,6 +143,12 @@ export function buildCredentials(
         "Missing credentials: X-Halo-Client-ID / X-Halo-Client-Secret (or HALOPSA_CLIENT_ID / HALOPSA_CLIENT_SECRET)",
     };
   }
+
+  // Drop unresolved MCPB placeholders / blank values so a blank optional field
+  // (which arrives as the literal "${user_config.X}") is treated as absent
+  // rather than a real setting. See cleanCredential / issue #73.
+  tenant = cleanCredential(tenant);
+  baseUrl = cleanCredential(baseUrl);
 
   if (!tenant && !baseUrl) {
     return {

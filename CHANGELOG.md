@@ -2,6 +2,13 @@
 
 ### Fixed
 
+- **Config placeholders:** an unresolved MCPB/DXT `${user_config.X}` placeholder
+  in `HALOPSA_TENANT` / `HALOPSA_BASE_URL` (injected verbatim when an optional
+  field is left blank in the desktop bundle) is now treated as absent instead of
+  a real value. Previously a blank Base URL left the literal
+  `${user_config.halopsa_base_url}` in the env var; being truthy it defeated the
+  `!tenant && !baseUrl` guard, was passed to the SDK, and threw on `new URL(...)`
+  — breaking even a correct tenant-only setup. Mirrors itglue-mcp #73.
 - **Deploy buttons:** one-click "Deploy to Cloudflare Workers" and "Deploy to
   DigitalOcean" builds no longer fail with `npm error 401 Unauthorized` from
   `npm.pkg.github.com`. The `.npmrc` now reads a `read:packages` token from

@@ -3,7 +3,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { getCredentials, getClient, clearClient } from "../utils/client.js";
+import {
+  getCredentials,
+  getClient,
+  clearClient,
+  cleanCredential,
+} from "../utils/client.js";
 
 // Mock the node-halopsa library
 vi.mock("@wyre-technology/node-halopsa", () => ({
@@ -130,6 +135,72 @@ describe("HaloPSA Client Utilities", () => {
         baseUrl: "https://api.halopsa.com",
       });
     });
+
+    // Regression: issue #73. A blank optional Base URL field in an MCPB/DXT
+    // desktop bundle is injected as the literal "${user_config.halopsa_base_url}".
+    // That string is truthy, so the old `!tenant && !baseUrl` guard was defeated
+    // and the placeholder reached the SDK, which threw on `new URL(...)` and
+    // broke an otherwise-valid tenant-only setup. baseUrl must resolve to absent.
+    it("should ignore an unresolved base URL placeholder and keep the tenant path", () => {
+      process.env.HALOPSA_CLIENT_ID = "test-id";
+      process.env.HALOPSA_CLIENT_SECRET = "test-secret";
+      process.env.HALOPSA_TENANT = "test-tenant";
+      process.env.HALOPSA_BASE_URL = "${user_config.halopsa_base_url}";
+
+      const creds = getCredentials();
+      expect(creds).toEqual({
+        clientId: "test-id",
+        clientSecret: "test-secret",
+        tenant: "test-tenant",
+        baseUrl: undefined,
+      });
+    });
+
+    it("should ignore an unresolved tenant placeholder and keep the base URL path", () => {
+      process.env.HALOPSA_CLIENT_ID = "test-id";
+      process.env.HALOPSA_CLIENT_SECRET = "test-secret";
+      process.env.HALOPSA_TENANT = "${user_config.halopsa_tenant}";
+      process.env.HALOPSA_BASE_URL = "https://api.halopsa.com";
+
+      const creds = getCredentials();
+      expect(creds).toEqual({
+        clientId: "test-id",
+        clientSecret: "test-secret",
+        tenant: undefined,
+        baseUrl: "https://api.halopsa.com",
+      });
+    });
+
+    it("should return null when both tenant and base URL are unresolved placeholders", () => {
+      process.env.HALOPSA_CLIENT_ID = "test-id";
+      process.env.HALOPSA_CLIENT_SECRET = "test-secret";
+      process.env.HALOPSA_TENANT = "${user_config.halopsa_tenant}";
+      process.env.HALOPSA_BASE_URL = "${user_config.halopsa_base_url}";
+
+      const creds = getCredentials();
+      expect(creds).toBeNull();
+    });
+  });
+
+  describe("cleanCredential", () => {
+    it("drops undefined, empty, whitespace, and ${...} placeholder values", () => {
+      expect(cleanCredential(undefined)).toBeUndefined();
+      expect(cleanCredential("")).toBeUndefined();
+      expect(cleanCredential("   ")).toBeUndefined();
+      expect(cleanCredential("${user_config.halopsa_base_url}")).toBeUndefined();
+      expect(cleanCredential("${user_config.halopsa_tenant}")).toBeUndefined();
+      expect(
+        cleanCredential("  ${user_config.halopsa_base_url}  ")
+      ).toBeUndefined();
+    });
+
+    it("preserves and trims real values", () => {
+      expect(cleanCredential("acme")).toBe("acme");
+      expect(cleanCredential("  acme  ")).toBe("acme");
+      expect(cleanCredential("https://api.halopsa.com")).toBe(
+        "https://api.halopsa.com"
+      );
+    });
   });
 
   describe("getClient", () => {
@@ -153,6 +224,21 @@ describe("HaloPSA Client Utilities", () => {
       expect(client).toBeDefined();
       expect(client.tickets).toBeDefined();
       expect(client.clients).toBeDefined();
+    });
+
+    // Regression: issue #73. With a valid tenant and a blank optional Base URL
+    // field (injected as the literal "${user_config.halopsa_base_url}"), getClient
+    // must resolve via the tenant path rather than reject. Before the fix the
+    // truthy placeholder defeated the `!tenant && !baseUrl` guard and was passed
+    // to the SDK, which took the baseUrl branch and threw on `new URL(...)`.
+    // (The credential shape is asserted precisely in the getCredentials suite.)
+    it("should resolve via the tenant path when the base URL is an unresolved placeholder", async () => {
+      process.env.HALOPSA_CLIENT_ID = "test-id";
+      process.env.HALOPSA_CLIENT_SECRET = "test-secret";
+      process.env.HALOPSA_TENANT = "test-tenant";
+      process.env.HALOPSA_BASE_URL = "${user_config.halopsa_base_url}";
+
+      await expect(getClient()).resolves.toBeDefined();
     });
 
     it("should return cached client on subsequent calls", async () => {
