@@ -1,4 +1,4 @@
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 COPY package*.json .npmrc ./
 ARG GITHUB_TOKEN
@@ -8,7 +8,7 @@ RUN echo "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}" >> .npmrc && \
 COPY . .
 RUN npm run build
 
-FROM node:22-alpine AS runner
+FROM node:26-alpine AS runner
 LABEL io.modelcontextprotocol.server.name="io.github.wyre-technology/halopsa-mcp"
 WORKDIR /app
 ENV NODE_ENV=production
