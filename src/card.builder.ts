@@ -25,6 +25,50 @@ export const TICKET_CARD_META = {
   ui: { resourceUri: TICKET_CARD_RESOURCE_URI },
 } as const;
 
+/** Mirror of Brand in ui/ticket-card.ts — keep in sync. */
+export interface CardBrand {
+  name?: string;
+  logoUrl?: string;
+  primaryColor?: string;
+  accentColor?: string;
+  bg?: string;
+  text?: string;
+}
+
+/** The BRAND_INJECT comment marker baked into the card HTML (see ui/index.html). */
+const BRAND_INJECT_RE = /<!--\s*BRAND_INJECT:[\s\S]*?-->/;
+
+/**
+ * Serve-time brand injection: replace the BRAND_INJECT marker with an inline
+ * `window.__BRAND__` script so self-hosters can theme the card without
+ * rebuilding the bundle. An empty brand returns the HTML unchanged (the card
+ * renders its neutral defaults). `<` is escaped so brand values can never
+ * break out of the script tag.
+ */
+export function applyBrandInjection(html: string, brand: CardBrand): string {
+  if (!brand || Object.values(brand).every((v) => !v)) return html;
+  const json = JSON.stringify(brand).replace(/</g, "\\u003c");
+  return html.replace(BRAND_INJECT_RE, `<script>window.__BRAND__=${json}</script>`);
+}
+
+/**
+ * Resolve brand overrides from MCP_BRAND_* environment variables. Guarded for
+ * runtimes without `process` (Cloudflare Workers), where this returns an empty
+ * brand and the card serves its neutral defaults.
+ */
+export function resolveBrandFromEnv(): CardBrand {
+  if (typeof process === "undefined" || !process.env) return {};
+  const env = process.env;
+  const brand: CardBrand = {};
+  if (env.MCP_BRAND_NAME) brand.name = env.MCP_BRAND_NAME;
+  if (env.MCP_BRAND_LOGO_URL) brand.logoUrl = env.MCP_BRAND_LOGO_URL;
+  if (env.MCP_BRAND_PRIMARY_COLOR) brand.primaryColor = env.MCP_BRAND_PRIMARY_COLOR;
+  if (env.MCP_BRAND_ACCENT_COLOR) brand.accentColor = env.MCP_BRAND_ACCENT_COLOR;
+  if (env.MCP_BRAND_BG) brand.bg = env.MCP_BRAND_BG;
+  if (env.MCP_BRAND_TEXT) brand.text = env.MCP_BRAND_TEXT;
+  return brand;
+}
+
 /** Mirror of TicketCard in ui/ticket-card.ts — keep in sync. */
 export interface TicketCard {
   id: number;

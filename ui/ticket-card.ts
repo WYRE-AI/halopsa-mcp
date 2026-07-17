@@ -12,9 +12,10 @@
  * Rendering uses DOM construction (no innerHTML) — ticket summaries and notes
  * are untrusted PSA data, so text only ever lands in text nodes.
  *
- * White-label: the card defaults to WYRE branding but applies an injected
- * `window.__BRAND__` override (set by the MCP server or, eventually, the
- * gateway per-org) so the same card can render in any customer's brand.
+ * White-label: the card is neutral by default (no vendor identity) and applies
+ * an injected `window.__BRAND__` override (set by the MCP server via
+ * MCP_BRAND_* env vars, or a gateway per-org) so the same card can render in
+ * any operator's brand.
  */
 import { App } from "@modelcontextprotocol/ext-apps";
 
@@ -48,7 +49,7 @@ interface TicketCard {
 }
 
 const brand: Brand = window.__BRAND__ ?? {};
-const brandName = brand.name ?? "WYRE";
+const brandName = brand.name ?? "";
 
 // Apply any injected brand overrides onto the CSS custom properties.
 function applyBrand(): void {
@@ -112,15 +113,20 @@ function noteEl(n: { who?: string; note: string }): HTMLElement {
 function render(t: TicketCard): void {
   current = t;
 
-  const brandId = el("span", "brandid");
-  if (brand.logoUrl) {
-    const logo = document.createElement("img");
-    logo.src = brand.logoUrl;
-    logo.alt = brandName;
-    logo.style.display = "inline-block";
-    brandId.append(logo);
+  // Brand identity only renders when a brand was injected — the neutral
+  // default shows just the ticket number/vendor context in the header.
+  let brandId: HTMLElement | null = null;
+  if (brandName || brand.logoUrl) {
+    brandId = el("span", "brandid");
+    if (brand.logoUrl) {
+      const logo = document.createElement("img");
+      logo.src = brand.logoUrl;
+      logo.alt = brandName;
+      logo.style.display = "inline-block";
+      brandId.append(logo);
+    }
+    if (brandName) brandId.append(el("span", "brand", brandName));
   }
-  brandId.append(el("span", "brand", brandName));
 
   const notesSection = el("div", "notes", el("div", "notes__h", `Notes (${t.notes.length})`));
   for (const n of t.notes) notesSection.append(noteEl(n));

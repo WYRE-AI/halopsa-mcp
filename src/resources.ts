@@ -9,7 +9,12 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { TICKET_CARD_RESOURCE_URI, MCP_APP_RESOURCE_MIME } from "./card.builder.js";
+import {
+  TICKET_CARD_RESOURCE_URI,
+  MCP_APP_RESOURCE_MIME,
+  applyBrandInjection,
+  resolveBrandFromEnv,
+} from "./card.builder.js";
 import { TICKET_CARD_HTML } from "./generated/ticket-card-html.js";
 
 export interface McpResource {
@@ -41,7 +46,9 @@ export function readResource(uri: string): McpResourceContent {
     return {
       uri,
       mimeType: MCP_APP_RESOURCE_MIME,
-      text: TICKET_CARD_HTML,
+      // Neutral by default; MCP_BRAND_* env vars inject a per-operator brand
+      // at serve time (no rebuild needed). Empty brand = HTML served as-is.
+      text: applyBrandInjection(TICKET_CARD_HTML, resolveBrandFromEnv()),
     };
   }
   throw new Error(`Unknown resource: ${uri}`);

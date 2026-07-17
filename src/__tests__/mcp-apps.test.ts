@@ -12,6 +12,7 @@ import { getAvailableDomains, getDomainHandler } from "../domains/index.js";
 import { listResources, readResource } from "../resources.js";
 import {
   buildTicketCard,
+  applyBrandInjection,
   TICKET_CARD_RESOURCE_URI,
   MCP_APP_RESOURCE_MIME,
 } from "../card.builder.js";
@@ -59,6 +60,7 @@ describe("MCP Apps ticket card", () => {
     it("reads back as profile=mcp-app HTML containing the card app", () => {
       const content = readResource(TICKET_CARD_RESOURCE_URI);
       expect(content.mimeType).toBe(MCP_APP_RESOURCE_MIME);
+      // No MCP_BRAND_* env set → the embedded HTML is served byte-identical.
       expect(content.text).toBe(TICKET_CARD_HTML);
       expect(content.text).toContain("card__bar");
       expect(content.text).toContain("BRAND_INJECT");
@@ -67,8 +69,51 @@ describe("MCP Apps ticket card", () => {
       expect(content.text).not.toContain('src="./ticket-card.ts"');
     });
 
+    it("serves neutral defaults with no vendor identity", () => {
+      const { text } = readResource(TICKET_CARD_RESOURCE_URI);
+      expect(text).not.toMatch(/WYRE/i);
+      expect(text).not.toContain("00c9db"); // WYRE cyan
+      expect(text).not.toContain("ede947"); // WYRE yellow
+      expect(text).not.toContain("fonts.googleapis.com"); // no external fetches
+    });
+
+    it("injects MCP_BRAND_* env vars into the served HTML", () => {
+      vi.stubEnv("MCP_BRAND_NAME", "Acme MSP");
+      vi.stubEnv("MCP_BRAND_PRIMARY_COLOR", "#ff0000");
+      try {
+        const { text } = readResource(TICKET_CARD_RESOURCE_URI);
+        expect(text).toContain(
+          '<script>window.__BRAND__={"name":"Acme MSP","primaryColor":"#ff0000"}</script>'
+        );
+        expect(text).not.toContain("BRAND_INJECT");
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it("rejects unknown resource URIs", () => {
       expect(() => readResource("ui://halopsa/nope.html")).toThrow(/Unknown resource/);
+    });
+  });
+
+  describe("applyBrandInjection", () => {
+    const html = TICKET_CARD_HTML;
+
+    it("replaces the marker with an inline window.__BRAND__ script", () => {
+      const out = applyBrandInjection(html, { name: "Acme", primaryColor: "#123456" });
+      expect(out).toContain('window.__BRAND__={"name":"Acme","primaryColor":"#123456"}');
+      expect(out).not.toContain("BRAND_INJECT");
+    });
+
+    it("escapes < so brand values cannot break out of the script tag", () => {
+      const out = applyBrandInjection(html, { name: '</script><script>alert(1)' });
+      expect(out).not.toContain("</script><script>alert(1)");
+      expect(out).toContain("\\u003c/script>\\u003cscript>alert(1)");
+    });
+
+    it("returns the HTML unchanged for an empty brand", () => {
+      expect(applyBrandInjection(html, {})).toBe(html);
+      expect(applyBrandInjection(html, { name: "" })).toBe(html);
     });
   });
 
