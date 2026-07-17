@@ -26,6 +26,7 @@ import {
 } from "./utils/client.js";
 import { setServerRef } from "./utils/server-ref.js";
 import { registerPromptHandlers } from "./prompts.js";
+import { registerResourceHandlers } from "./resources.js";
 
 export type { HaloPsaCredentials };
 
@@ -196,11 +197,13 @@ export function createMcpServer(): Server {
       capabilities: {
         tools: {},
         prompts: {},
+        resources: {},
       },
     }
   );
   setServerRef(server);
   registerPromptHandlers(server);
+  registerResourceHandlers(server);
 
   /**
    * Handle ListTools requests - always returns ALL tools

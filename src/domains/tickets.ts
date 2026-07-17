@@ -8,6 +8,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { DomainHandler, CallToolResult } from "../utils/types.js";
 import { getClient } from "../utils/client.js";
 import { elicitSelection } from "../utils/elicitation.js";
+import { buildTicketCard, TICKET_CARD_META } from "../card.builder.js";
 
 /**
  * Get ticket domain tools
@@ -57,6 +58,7 @@ function getTools(): Tool[] {
     {
       name: "halopsa_tickets_get",
       description: "Get ticket details by ID",
+      _meta: TICKET_CARD_META,
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -133,6 +135,7 @@ function getTools(): Tool[] {
     {
       name: "halopsa_tickets_add_action",
       description: "Add note to ticket",
+      _meta: TICKET_CARD_META,
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -243,15 +246,20 @@ async function handleCall(
         actions = actionsResponse.actions;
       }
 
+      const payload: Record<string, unknown> = includeActions
+        ? { ...ticket, actions }
+        : { ...ticket };
+
+      // MCP Apps: attach the normalized card payload the ui:// ticket card
+      // renders from. Best-effort — a null card just means no UI surface.
+      const card = await buildTicketCard(payload, client);
+      if (card) payload._card = card;
+
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(
-              includeActions ? { ...ticket, actions } : ticket,
-              null,
-              2
-            ),
+            text: JSON.stringify(payload, null, 2),
           },
         ],
       };

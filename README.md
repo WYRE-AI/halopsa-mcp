@@ -48,6 +48,12 @@ This architecture provides:
 - Better organization of related operations
 - Clear navigation state
 
+### Interactive Ticket Card (MCP Apps)
+
+`halopsa_tickets_get` renders as a branded, interactive card in MCP Apps hosts
+(Claude Desktop/web) with an in-card "Add note" round-trip via
+`halopsa_tickets_add_action`; plain-JSON behavior is unchanged in other hosts.
+
 ## Installation
 
 This package is published to the **GitHub Packages** npm registry, which requires a
