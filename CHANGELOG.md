@@ -10,6 +10,12 @@
 
 ### Fixed
 
+- **SDK single-read HTTP responses:** bumped `@wyre-technology/node-halopsa` to
+  [1.0.6](https://github.com/wyre-technology/node-halopsa/releases/tag/v1.0.6),
+  which reads each HTTP response body exactly once. Previously a failed
+  double-read could swallow API error details into an empty `{}`; errors now
+  surface with a descriptive message. Same pattern as
+  [connectwise-automate-mcp#54](https://github.com/wyre-technology/connectwise-automate-mcp/issues/54).
 - **Config placeholders:** an unresolved MCPB/DXT `${user_config.X}` placeholder
   in `HALOPSA_TENANT` / `HALOPSA_BASE_URL` (injected verbatim when an optional
   field is left blank in the desktop bundle) is now treated as absent instead of
