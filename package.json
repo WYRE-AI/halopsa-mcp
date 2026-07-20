@@ -48,7 +48,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@wyre-technology/node-halopsa": "^1.0.6"
+    "@wyre-technology/node-halopsa": "^1.0.7"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
