@@ -32,6 +32,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpServer, resolveGatewayCredentials } from "./mcp-server.js";
 import { runWithCredentials } from "./utils/client.js";
+import { runWithServerRef, bindServerRef } from "./utils/server-ref.js";
 
 /**
  * Start the server with HTTP Streamable transport.
@@ -79,8 +80,14 @@ async function startHttpTransport(): Promise<void> {
             server.close();
           });
 
-          server.connect(transport).then(() => {
-            transport.handleRequest(req, res);
+          // Bind this request's server into the per-request async context
+          // (not a module-level global) so elicitation helpers resolve
+          // *this* server/transport even after await gaps, and never a
+          // concurrent request's — see utils/server-ref.ts.
+          runWithServerRef(server, () => {
+            server.connect(transport).then(() => {
+              transport.handleRequest(req, res);
+            });
           });
         };
 
@@ -145,6 +152,10 @@ async function startHttpTransport(): Promise<void> {
  */
 async function startStdioTransport(): Promise<void> {
   const server = createMcpServer();
+  // stdio is single-session (one process = one caller), so there is no
+  // concurrent tenant to isolate from — bind once for the process
+  // lifetime rather than per-request. See utils/server-ref.ts.
+  bindServerRef(server);
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("HaloPSA MCP server running on stdio (decision tree mode)");

@@ -24,7 +24,6 @@ import {
   cleanCredential,
   type HaloPsaCredentials,
 } from "./utils/client.js";
-import { setServerRef } from "./utils/server-ref.js";
 import { registerPromptHandlers } from "./prompts.js";
 import { registerResourceHandlers } from "./resources.js";
 
@@ -186,6 +185,12 @@ export function resolveGatewayCredentials(
  * Credentials are NOT passed here — they are resolved at call time via
  * `getCredentials()`, which reads the AsyncLocalStorage context bound by
  * `runWithCredentials` (gateway mode) or falls back to env vars (stdio mode).
+ *
+ * The returned server is likewise NOT registered as "the" server anywhere
+ * here — callers are responsible for binding it into the per-request
+ * `server-ref` AsyncLocalStorage context (via `runWithServerRef` /
+ * `bindServerRef`) so elicitation helpers resolve the right server even
+ * after await gaps. See `utils/server-ref.ts` for why this matters.
  */
 export function createMcpServer(): Server {
   const server = new Server(
@@ -201,7 +206,6 @@ export function createMcpServer(): Server {
       },
     }
   );
-  setServerRef(server);
   registerPromptHandlers(server);
   registerResourceHandlers(server);
 
