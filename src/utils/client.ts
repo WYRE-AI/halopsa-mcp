@@ -94,11 +94,26 @@ export function getCredentials(): HaloPsaCredentials | null {
 /**
  * Client cache keyed by credential fingerprint so different tenants
  * get separate client instances, but the same tenant reuses its client.
+ *
+ * Bounded LRU: in gateway mode a new key can appear per distinct
+ * tenant/credential set seen over the process lifetime, so the cache is
+ * capped at MAX_CLIENT_CACHE_SIZE and evicts the least-recently-used entry
+ * on overflow rather than growing without limit.
  */
+const MAX_CLIENT_CACHE_SIZE = 500;
 const clientCache = new Map<string, HaloPsaClient>();
 
 function credentialKey(creds: HaloPsaCredentials): string {
   return `${creds.clientId}:${creds.tenant ?? ""}:${creds.baseUrl ?? ""}`;
+}
+
+/**
+ * Touch a cache entry, bumping it to most-recently-used by re-inserting it
+ * (Map iteration/insertion order puts it last).
+ */
+function touchCacheEntry(key: string, client: HaloPsaClient): void {
+  clientCache.delete(key);
+  clientCache.set(key, client);
 }
 
 /**
@@ -117,16 +132,26 @@ export async function getClient(): Promise<HaloPsaClient> {
   const key = credentialKey(creds);
   let client = clientCache.get(key);
 
-  if (!client) {
-    const { HaloPsaClient } = await import("@wyre-technology/node-halopsa");
-    client = new HaloPsaClient({
-      clientId: creds.clientId,
-      clientSecret: creds.clientSecret,
-      tenant: creds.tenant,
-      baseUrl: creds.baseUrl,
-    });
-    clientCache.set(key, client);
+  if (client) {
+    touchCacheEntry(key, client);
+    return client;
   }
+
+  const { HaloPsaClient } = await import("@wyre-technology/node-halopsa");
+  client = new HaloPsaClient({
+    clientId: creds.clientId,
+    clientSecret: creds.clientSecret,
+    tenant: creds.tenant,
+    baseUrl: creds.baseUrl,
+  });
+
+  if (clientCache.size >= MAX_CLIENT_CACHE_SIZE) {
+    // Map preserves insertion order, so the first key is the
+    // least-recently-used entry.
+    const oldestKey = clientCache.keys().next().value;
+    if (oldestKey !== undefined) clientCache.delete(oldestKey);
+  }
+  clientCache.set(key, client);
 
   return client;
 }
