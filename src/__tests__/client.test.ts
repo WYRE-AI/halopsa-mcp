@@ -282,4 +282,39 @@ describe("HaloPSA Client Utilities", () => {
       expect(client1).not.toBe(client2);
     });
   });
+
+  // Regression: the tenant-keyed client cache (one entry per distinct
+  // clientId/tenant/baseUrl fingerprint) previously grew without bound for
+  // the lifetime of the process. In gateway mode a long-running server sees
+  // a new fingerprint per tenant over time, so an unbounded Map is a slow
+  // memory leak. The cache must now cap its size and evict the
+  // least-recently-used entry rather than growing forever.
+  describe("client cache eviction", () => {
+    it("evicts the least-recently-used entry once the cache is full", async () => {
+      process.env.HALOPSA_CLIENT_SECRET = "test-secret";
+      process.env.HALOPSA_TENANT = "test-tenant";
+
+      // MAX_CLIENT_CACHE_SIZE is 500; fill it, then add one more to force
+      // an eviction of the oldest (first) entry.
+      const MAX_CLIENT_CACHE_SIZE = 500;
+      let firstClient: unknown;
+      for (let i = 0; i < MAX_CLIENT_CACHE_SIZE; i++) {
+        process.env.HALOPSA_CLIENT_ID = `tenant-${i}`;
+        const client = await getClient();
+        if (i === 0) firstClient = client;
+      }
+
+      // Cache is now full. Adding one more distinct tenant should evict the
+      // very first tenant's client rather than growing past the cap.
+      process.env.HALOPSA_CLIENT_ID = "tenant-overflow";
+      await getClient();
+
+      // Re-request the first tenant: it should be recreated (a new
+      // instance), proving its old cache entry was evicted, not retained.
+      process.env.HALOPSA_CLIENT_ID = "tenant-0";
+      const firstClientAgain = await getClient();
+
+      expect(firstClientAgain).not.toBe(firstClient);
+    });
+  });
 });

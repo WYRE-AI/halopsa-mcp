@@ -61,6 +61,21 @@
 
 ### Fixed
 
+- **Unbounded tenant client cache (memory-leak risk, gateway mode).** The
+  per-credential HaloPSA client cache (`clientCache` in `src/utils/client.ts`,
+  keyed by `clientId:tenant:baseUrl`) is tenant-keyed rather than a shared
+  singleton, so it was never the cross-tenant credential-leak bug class — but
+  it had no cap or eviction: `getClient()` only ever added entries, and the
+  only removal path (`clearClient()`) is a full-clear used solely in tests.
+  In a long-running Node HTTP gateway (`AUTH_MODE=gateway`), each distinct
+  tenant credential fingerprint seen over the process lifetime adds one more
+  permanent entry, so the Map grows without bound for as long as the process
+  runs. Added a 500-entry LRU cap: `getClient()` now bumps a hit to
+  most-recently-used and, on a miss with the cache full, evicts the
+  least-recently-used entry (oldest by Map insertion order) before inserting
+  the new client. No behavior change below the cap. New test in
+  `src/__tests__/client.test.ts` fills the cache past the limit and asserts
+  the oldest tenant's client is recreated (evicted), not reused.
 - **SDK single-read HTTP responses:** bumped `@wyre-technology/node-halopsa` to
   [1.0.6](https://github.com/wyre-technology/node-halopsa/releases/tag/v1.0.6),
   which reads each HTTP response body exactly once. Previously a failed
