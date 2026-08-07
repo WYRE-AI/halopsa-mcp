@@ -17,6 +17,14 @@ updates:
       prefix: "deps"
       prefix-development: "deps-dev"
       include: "scope"
+    ignore:
+      # typescript-eslint's peer range caps typescript at <6.1.0 (confirmed
+      # against the latest 8.65.x release, no compatible major exists yet) --
+      # without this, the grouped dev-dependencies bump ERESOLVEs every time
+      # dependabot proposes typescript 6.1+/7.x alongside a typescript-eslint
+      # bump. Remove once typescript-eslint ships peer support for typescript 7.
+      - dependency-name: "typescript"
+        versions: [">=6.1.0"]
     groups:
       # All dev/CI tooling (eslint, vitest, typescript, @types/*, etc.) incl.
       # majors → ONE PR. The janitor auto-merges it when CI is green.
