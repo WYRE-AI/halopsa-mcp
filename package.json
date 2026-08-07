@@ -47,7 +47,7 @@
     "registry": "https://npm.pkg.github.com"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@wyre-technology/node-halopsa": "^1.0.7"
   },
   "devDependencies": {
