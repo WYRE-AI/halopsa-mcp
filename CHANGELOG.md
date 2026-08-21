@@ -1,5 +1,38 @@
 ## [Unreleased]
 
+### Added
+
+- **`halopsa_tickets_list` now supports full-text `search`.** HaloPSA's
+  `/Tickets` endpoint already accepts a `search` query parameter; it just
+  wasn't exposed on this tool, forcing a multi-page sweep for what a single
+  search call can answer.
+
+### Fixed
+
+- **`limit` was silently ignored on the first page of `halopsa_tickets_list`,
+  and `record_count` reported two different things depending on the call.**
+  Traced to `@wyre-technology/node-halopsa` (bumped to 1.0.10): HaloPSA only
+  honors a caller's `page_size` when `page_no` is *also* present on the same
+  request. A `.list({ pageSize: 100 })` call with no explicit `page_no` was
+  accepted and silently fell back to HaloPSA's own default page size (50)
+  for that implicit first page — no error. Paging the same client with
+  `page_no=2, limit=100` correctly started at offset 100, leaving the
+  records between the truncated first page and that offset (ids 50–99 of
+  the requested window) never returned by any call in the sequence.
+  `record_count` was affected the same way — it only reported the true
+  total once pagination was genuinely active on every request, which is
+  what caused `record_count` to look like it meant different things on the
+  first call versus a paged one. See
+  [node-halopsa#63](https://github.com/wyre-technology/node-halopsa/pull/63).
+- **`dateoccurred_start`/`dateoccurred_end` were accepted and silently
+  ignored on `halopsa_tickets_list`.** Neither is a real HaloPSA query
+  parameter — confirmed against HaloPSA's own `/api/swagger/v2/swagger.json`
+  spec. The actual mechanism is `datesearch=dateoccured` (HaloPSA's own
+  misspelling of the field) plus `startdate`/`enddate`; sending the wrapper's
+  field names verbatim, as `@wyre-technology/node-halopsa` did before 1.0.10,
+  produced no filtering and no error — a passed date window silently
+  returned the same unfiltered result as no filter at all.
+
 ### Security
 
 - **Cross-tenant elicitation/confirmation misroute (gateway mode).** The

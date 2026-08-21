@@ -17,7 +17,7 @@ function getTools(): Tool[] {
   return [
     {
       name: "halopsa_tickets_list",
-      description: "List tickets with optional filters by client, status, agent, open/closed state, or date occurred range",
+      description: "List tickets with optional filters by client, status, agent, open/closed state, date occurred range, or full-text search",
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -43,6 +43,10 @@ function getTools(): Tool[] {
           dateoccurred_end: {
             type: "string",
             description: "ISO-8601 end date for tickets",
+          },
+          search: {
+            type: "string",
+            description: "Full-text search across tickets, in place of a multi-page sweep",
           },
           limit: {
             type: "number",
@@ -177,13 +181,14 @@ async function handleCall(
       const pageNo = args.page_no as number | undefined;
       const dateStart = args.dateoccurred_start as string | undefined;
       const dateEnd = args.dateoccurred_end as string | undefined;
+      const search = args.search as string | undefined;
       let openOnly = args.open_only as boolean | undefined;
       const closedOnly = args.closed_only as boolean | undefined;
 
       const hasFilters =
         args.client_id || args.status_id || args.agent_id ||
         args.open_only !== undefined || args.closed_only !== undefined ||
-        dateStart || dateEnd;
+        dateStart || dateEnd || search;
 
       if (!hasFilters) {
         const selection = await elicitSelection(
@@ -211,6 +216,7 @@ async function handleCall(
         closed_only: closedOnly,
         dateoccurred_start: dateStart,
         dateoccurred_end: dateEnd,
+        search: search,
         pageSize: limit,
         pageNo: pageNo,
       });
