@@ -128,6 +128,7 @@ describe("Tickets Domain Handler", () => {
       expect(listTool?.inputSchema.properties).toHaveProperty("status_id");
       expect(listTool?.inputSchema.properties).toHaveProperty("open_only");
       expect(listTool?.inputSchema.properties).toHaveProperty("limit");
+      expect(listTool?.inputSchema.properties).toHaveProperty("search");
     });
 
     it("halopsa_tickets_get should require ticket_id", () => {
@@ -178,6 +179,19 @@ describe("Tickets Domain Handler", () => {
           closed_only: undefined,
           pageSize: 10,
         });
+      });
+
+      // Regression: search was accepted by HaloPSA's API but never exposed
+      // on this tool, forcing a multi-page sweep for what a single
+      // full-text search call could answer.
+      it("passes search through to the API", async () => {
+        await ticketsHandler.handleCall("halopsa_tickets_list", {
+          search: "printer offline",
+        });
+
+        expect(mockTicketsList).toHaveBeenCalledWith(
+          expect.objectContaining({ search: "printer offline" })
+        );
       });
     });
 
