@@ -21,9 +21,9 @@ A Model Context Protocol (MCP) server for interacting with HaloPSA, featuring a 
 >    - **DigitalOcean App Platform** → set an encrypted env var named **`GITHUB_TOKEN`**
 >      with scope **Build Time** to your PAT (the `.do/app.yaml` already declares it).
 
-[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/wyre-technology/halopsa-mcp/tree/main)
+[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/WYRE-AI/halopsa-mcp/tree/main)
 
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/wyre-technology/halopsa-mcp)
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/WYRE-AI/halopsa-mcp)
 
 > [!NOTE]
 > The DigitalOcean target builds the full Docker image and runs the complete MCP
@@ -31,7 +31,7 @@ A Model Context Protocol (MCP) server for interacting with HaloPSA, featuring a 
 > Workers target is currently a thin entrypoint (the `/mcp` route returns 501 until
 > the Workers transport adapter lands) and is best suited to gateway-style
 > deployments; for a full self-hosted server prefer DigitalOcean or the prebuilt
-> container image (`ghcr.io/wyre-technology/halopsa-mcp`).
+> container image (`ghcr.io/wyre-ai/halopsa-mcp`).
 
 ## Architecture
 
@@ -67,7 +67,7 @@ token even for public packages. Authenticate once, then install:
 # Authenticate npm to GitHub Packages (token needs the read:packages scope)
 export NODE_AUTH_TOKEN=$(gh auth token)   # or a PAT with read:packages
 
-npm install @wyre-technology/halopsa-mcp
+npm install @wyre-ai/halopsa-mcp
 ```
 
 The repo's `.npmrc` already points the `@wyre-technology` scope at GitHub Packages and
@@ -95,7 +95,7 @@ export HALOPSA_CLIENT_SECRET="your-client-secret"
 export HALOPSA_TENANT="yourcompany"
 
 # Run the server
-npx @wyre-technology/halopsa-mcp
+npx @wyre-ai/halopsa-mcp
 ```
 
 ### Claude Desktop Configuration
@@ -107,7 +107,7 @@ Add to your Claude Desktop `claude_desktop_config.json`:
   "mcpServers": {
     "halopsa": {
       "command": "npx",
-      "args": ["@wyre-technology/halopsa-mcp"],
+      "args": ["@wyre-ai/halopsa-mcp"],
       "env": {
         "HALOPSA_CLIENT_ID": "your-client-id",
         "HALOPSA_CLIENT_SECRET": "your-client-secret",

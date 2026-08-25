@@ -3,7 +3,7 @@ spec:
   services:
     - name: halopsa-mcp
       github:
-        repo: wyre-technology/halopsa-mcp
+        repo: WYRE-AI/halopsa-mcp
         branch: main
         deploy_on_push: true
       dockerfile_path: Dockerfile

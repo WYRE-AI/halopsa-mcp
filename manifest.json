@@ -5,9 +5,9 @@
   "version": "0.0.0",
   "description": "MCP server for HaloPSA - access tickets, clients, assets, and invoices through AI assistants",
   "long_description": "Provides AI assistants with structured access to your HaloPSA data. Manage tickets, clients, assets, invoices, and contracts through the Model Context Protocol.",
-  "author": { "name": "Wyre Technology", "url": "https://github.com/wyre-technology" },
-  "repository": { "type": "git", "url": "https://github.com/wyre-technology/halopsa-mcp" },
-  "homepage": "https://github.com/wyre-technology/halopsa-mcp",
+  "author": { "name": "Wyre Technology", "url": "https://github.com/WYRE-AI" },
+  "repository": { "type": "git", "url": "https://github.com/WYRE-AI/halopsa-mcp" },
+  "homepage": "https://github.com/WYRE-AI/halopsa-mcp",
   "license": "Apache-2.0",
   "keywords": ["halopsa", "psa", "msp", "tickets", "it-management"],
   "server": {
