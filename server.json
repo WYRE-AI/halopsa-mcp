@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.wyre-technology/halopsa-mcp",
+  "name": "io.github.WYRE-AI/halopsa-mcp",
   "title": "HaloPSA",
   "description": "MCP server for HaloPSA — clients, tickets, and PSA workflows via the HaloPSA REST API.",
   "repository": {
-    "url": "https://github.com/wyre-technology/halopsa-mcp",
+    "url": "https://github.com/WYRE-AI/halopsa-mcp",
     "source": "github"
   },
   "version": "0.0.0",
-  "websiteUrl": "https://github.com/wyre-technology/halopsa-mcp",
+  "websiteUrl": "https://github.com/WYRE-AI/halopsa-mcp",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/wyre-technology/halopsa-mcp:0.0.0",
+      "identifier": "ghcr.io/wyre-ai/halopsa-mcp:0.0.0",
       "transport": {
         "type": "stdio"
       },
