@@ -267,7 +267,7 @@ export function createMcpServer(): Server {
           content: [
             {
               type: "text",
-              text: `HaloPSA MCP Server Status\n\nCredentials: ${credStatus}\nAvailable domains: ${getAvailableDomains().join(", ")}\n\nAll tools are available at all times. Use halopsa_navigate to discover tools by domain.`,
+              text: `HaloPSA MCP Server Status\n\nCredentials: ${credStatus}\nAvailable domains: ${getAvailableDomains().join(", ")}\n\nCall conduit__my_access to see which tools you can use under the gateway, or halopsa_navigate to browse all tools by domain when running standalone.`,
             },
           ],
         };
@@ -302,7 +302,7 @@ export function createMcpServer(): Server {
         content: [
           {
             type: "text",
-            text: `Unknown tool: ${name}. Use halopsa_navigate to discover available tools by domain.`,
+            text: `Unknown tool: ${name}. Call conduit__my_access to see which tools you can use under the gateway, or halopsa_navigate to browse available tools by domain when running standalone.`,
           },
         ],
         isError: true,

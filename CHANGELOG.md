@@ -9,6 +9,14 @@
 
 ### Fixed
 
+- **`halopsa_status` and the unknown-tool error advised calling `halopsa_navigate`
+  to discover tools without qualification.** Conduit suppresses `*_navigate` /
+  `*_back` at the gateway (tier filtering lives in the grant resolver, which the
+  container cannot see) and replaces them with `conduit__my_access`, so that
+  advice pointed callers behind the gateway at a tool that returns
+  method-not-found. Both strings now point to `conduit__my_access` for
+  gateway callers and keep `halopsa_navigate` as the standalone-mode
+  discovery path. The tool itself is unchanged. (WYRE-AI/conduit#1236)
 - **`limit` was silently ignored on the first page of `halopsa_tickets_list`,
   and `record_count` reported two different things depending on the call.**
   Traced to `@wyre-technology/node-halopsa` (bumped to 1.0.10): HaloPSA only
