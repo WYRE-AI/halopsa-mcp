@@ -9,7 +9,7 @@
  *
  * halopsa-mcp's own credential resolution (resolveGatewayCredentials in
  * src/mcp-server.ts) is a pure header read, but the vendored
- * @wyre-technology/node-halopsa SDK's AuthManager has its own lazy side
+ * @wyre-ai/node-halopsa SDK's AuthManager has its own lazy side
  * effect: getToken() calls acquireToken(), a real outbound OAuth2
  * client-credentials POST to `${baseUrl}/auth/token` (baseUrl derives from
  * the tenant header, e.g. https://<tenant>.halopsa.com), the first time any

@@ -8,7 +8,7 @@
  * unchanged.
  */
 
-import type { HaloPsaClient } from "@wyre-technology/node-halopsa";
+import type { HaloPsaClient } from "@wyre-ai/node-halopsa";
 
 export const TICKET_CARD_RESOURCE_URI = "ui://halopsa/ticket-card.html";
 

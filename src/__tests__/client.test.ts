@@ -11,7 +11,7 @@ import {
 } from "../utils/client.js";
 
 // Mock the node-halopsa library
-vi.mock("@wyre-technology/node-halopsa", () => ({
+vi.mock("@wyre-ai/node-halopsa", () => ({
   HaloPsaClient: vi.fn().mockImplementation(function (config) { return ({
     config,
     tickets: {

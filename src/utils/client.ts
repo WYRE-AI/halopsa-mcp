@@ -9,7 +9,7 @@
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { HaloPsaClient } from "@wyre-technology/node-halopsa";
+import type { HaloPsaClient } from "@wyre-ai/node-halopsa";
 
 export interface HaloPsaCredentials {
   clientId: string;
@@ -137,7 +137,7 @@ export async function getClient(): Promise<HaloPsaClient> {
     return client;
   }
 
-  const { HaloPsaClient } = await import("@wyre-technology/node-halopsa");
+  const { HaloPsaClient } = await import("@wyre-ai/node-halopsa");
   client = new HaloPsaClient({
     clientId: creds.clientId,
     clientSecret: creds.clientSecret,
