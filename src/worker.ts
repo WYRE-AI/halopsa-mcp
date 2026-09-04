@@ -22,7 +22,7 @@
  * `tools/list` and `initialize` work without credentials; only `tools/call`
  * requires them.
  *
- * The HaloPSA SDK (`@wyre-technology/node-halopsa`) uses the global `fetch`
+ * The HaloPSA SDK (`@wyre-ai/node-halopsa`) uses the global `fetch`
  * API, so it runs natively on the Workers runtime with `nodejs_compat`
  * (needed for AsyncLocalStorage).
  */
