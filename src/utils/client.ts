@@ -152,12 +152,14 @@ export function resolveOAuthTenantId(
   return undefined;
 }
 
+/** Extract a hosted Halo tenant label from a bare label or hosted URL. */
 function hostedTenantLabel(tenant: string): string | undefined {
   const host = tenant.trim().replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
   if (!host.includes(".")) return host;
   return tenantFromHost(host);
 }
 
+/** Derive the tenant subdomain from a recognized Halo-hosted hostname. */
 function tenantFromHost(host: string): string | undefined {
   const hostname = host.toLowerCase();
   const domain = HALO_HOSTED_DOMAINS.find(
@@ -247,11 +249,13 @@ export function isTokenMintFailure(error: unknown): boolean {
   return TOKEN_MINT_FAILED.test(error.message);
 }
 
+/** Read a positive numeric HTTP status code from an SDK error-like value. */
 function errorStatusCode(error: unknown): number | undefined {
   const status = (error as { statusCode?: unknown } | null)?.statusCode;
   return typeof status === "number" && status > 0 ? status : undefined;
 }
 
+/** Read the upstream response payload from an SDK error-like value. */
 function errorResponse(error: unknown): unknown {
   return (error as { response?: unknown } | null)?.response;
 }

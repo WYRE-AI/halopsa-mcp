@@ -19,6 +19,7 @@ const { HaloPsaClientMock } = vi.hoisted(() => ({
   HaloPsaClientMock: vi.fn(),
 }));
 
+/** Build the minimal mocked HaloPSA client surface used by this test suite. */
 function createMockClient(config: unknown) {
   return {
     config,
