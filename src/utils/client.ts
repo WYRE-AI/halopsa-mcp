@@ -18,10 +18,43 @@ export interface HaloPsaCredentials {
   baseUrl?: string;
 }
 
+/**
+ * Outcome of probing whether configured credentials can actually mint a token.
+ *
+ * `halopsa_status` used to report "Configured" from credential *presence*
+ * alone, which is how WYREAI-370 looked green while every data tool returned
+ * `Failed to acquire token: 500`.
+ */
+export type AuthProbeResult =
+  | { configured: false }
+  | {
+      configured: true;
+      healthy: boolean;
+      target: string;
+      error?: string;
+      warning?: string;
+    };
+
 // An unresolved MCPB/DXT manifest placeholder, e.g. "${user_config.halopsa_base_url}".
 // Desktop hosts inject the config template verbatim when its optional user_config
 // field is left blank, so the literal string arrives in the env var / header.
 const CONFIG_PLACEHOLDER = /^\$\{.*\}$/;
+
+/**
+ * Hosted Halo domains a tenant subdomain may be paired with.
+ * Kept in lockstep with `@wyre-ai/node-halopsa` `HALO_HOSTED_DOMAINS` so we
+ * can derive the OAuth `tenant` parameter from `https://{tenant}.halopsa.com`
+ * when the operator supplied only a base URL.
+ */
+const HALO_HOSTED_DOMAINS = [
+  "halopsa.com",
+  "haloitsm.com",
+  "haloservicedesk.com",
+  "nethelpdesk.com",
+];
+
+const TOKEN_MINT_FAILED = /failed to acquire token/i;
+const MAX_UPSTREAM_BODY_CHARS = 400;
 
 /**
  * Normalise a single credential value read from an env var or gateway header.
@@ -92,6 +125,49 @@ export function getCredentials(): HaloPsaCredentials | null {
 }
 
 /**
+ * Hosted Halo requires a `tenant` parameter on the client-credentials token
+ * request (`POST /auth/token?tenant=…`, also accepted in the form body).
+ *
+ * `@wyre-ai/node-halopsa` only sends that parameter when `tenantId` is set.
+ * This connector historically passed `tenant` solely to build
+ * `https://{tenant}.halopsa.com` and never set `tenantId`, so hosted token
+ * mints went out without the OAuth tenant selector.
+ *
+ * Returns the bare hosted subdomain when we can derive one, otherwise
+ * undefined (custom-domain / on-prem instances omit the param).
+ */
+export function resolveOAuthTenantId(
+  creds: Pick<HaloPsaCredentials, "tenant" | "baseUrl">
+): string | undefined {
+  if (creds.tenant) {
+    return hostedTenantLabel(creds.tenant) ?? creds.tenant.trim();
+  }
+  if (creds.baseUrl) {
+    try {
+      return tenantFromHost(new URL(creds.baseUrl).hostname);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function hostedTenantLabel(tenant: string): string | undefined {
+  const host = tenant.trim().replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
+  if (!host.includes(".")) return host;
+  return tenantFromHost(host);
+}
+
+function tenantFromHost(host: string): string | undefined {
+  const hostname = host.toLowerCase();
+  const domain = HALO_HOSTED_DOMAINS.find(
+    (d) => hostname === d || hostname.endsWith(`.${d}`)
+  );
+  if (!domain || hostname === domain) return undefined;
+  return hostname.slice(0, -(domain.length + 1));
+}
+
+/**
  * Client cache keyed by credential fingerprint so different tenants
  * get separate client instances, but the same tenant reuses its client.
  *
@@ -138,11 +214,13 @@ export async function getClient(): Promise<HaloPsaClient> {
   }
 
   const { HaloPsaClient } = await import("@wyre-ai/node-halopsa");
+  const tenantId = resolveOAuthTenantId(creds);
   client = new HaloPsaClient({
     clientId: creds.clientId,
     clientSecret: creds.clientSecret,
     tenant: creds.tenant,
     baseUrl: creds.baseUrl,
+    ...(tenantId ? { tenantId } : {}),
   });
 
   if (clientCache.size >= MAX_CLIENT_CACHE_SIZE) {
@@ -154,6 +232,143 @@ export async function getClient(): Promise<HaloPsaClient> {
   clientCache.set(key, client);
 
   return client;
+}
+
+/**
+ * True when the thrown error is the SDK failing to mint an OAuth token,
+ * including Halo's documented-odd 500 HTML page on unknown client ids.
+ *
+ * Duck-typed: `instanceof HaloPsaAuthenticationError` is unreliable across
+ * the dynamic `import("@wyre-ai/node-halopsa")` used by `getClient()`.
+ */
+export function isTokenMintFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.name === "HaloPsaAuthenticationError") return true;
+  return TOKEN_MINT_FAILED.test(error.message);
+}
+
+function errorStatusCode(error: unknown): number | undefined {
+  const status = (error as { statusCode?: unknown } | null)?.statusCode;
+  return typeof status === "number" && status > 0 ? status : undefined;
+}
+
+function errorResponse(error: unknown): unknown {
+  return (error as { response?: unknown } | null)?.response;
+}
+
+/**
+ * Collapse an upstream token-endpoint body into a short, secret-free snippet.
+ * Halo's 500 path returns a ~280KB HTML error page whose visible text is
+ * "Sorry, something went wrong" — that one line is the diagnosis, not the
+ * markup.
+ */
+export function summarizeErrorBody(raw: unknown): string | undefined {
+  if (raw == null) return undefined;
+
+  let text: string;
+  if (typeof raw === "string") {
+    text = raw;
+  } else {
+    try {
+      text = JSON.stringify(raw);
+    } catch {
+      return undefined;
+    }
+  }
+
+  const trimmed = text.trim();
+  if (!trimmed) return undefined;
+
+  if (/<[a-z][\s\S]*>/i.test(trimmed)) {
+    const stripped = trimmed
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    text = stripped || "HTML error page (no JSON error body)";
+  } else {
+    text = trimmed;
+  }
+
+  if (text.length > MAX_UPSTREAM_BODY_CHARS) {
+    return `${text.slice(0, MAX_UPSTREAM_BODY_CHARS)}…`;
+  }
+  return text;
+}
+
+/**
+ * Render a thrown error as the text a tool call (or status probe) reports.
+ *
+ * Token-mint failures become a typed `AUTH_FAILED` block with the HTTP status
+ * and upstream body. The SDK used to surface only
+ * `Failed to acquire token: 500`, hiding Halo's HTML "Sorry, something went
+ * wrong" page on `.response`.
+ */
+export function formatToolError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const body = summarizeErrorBody(errorResponse(error));
+  const statusCode = errorStatusCode(error);
+
+  if (isTokenMintFailure(error)) {
+    const statusPart = statusCode ? ` HTTP ${statusCode}` : "";
+    const parts = [
+      `AUTH_FAILED: HaloPSA token mint failed${statusPart}.`,
+      message.trim(),
+    ];
+    if (body && !message.includes(body)) {
+      parts.push(`Upstream: ${body}`);
+    }
+    if (statusCode === 500) {
+      parts.push(
+        "Halo often returns HTTP 500 HTML (not 401 JSON) for an unknown client id, a client-credentials application with no login agent, or a hosted tenant missing the OAuth tenant parameter."
+      );
+    }
+    return parts.join("\n");
+  }
+
+  const parts = [`Error: ${message}`];
+  if (body && !message.includes(body)) {
+    parts.push(body);
+  }
+  return parts.join("\n");
+}
+
+/**
+ * Verify configured credentials can mint a token by making one cheap
+ * authenticated call. Token acquisition is lazy inside the SDK, so constructing
+ * `HaloPsaClient` is not enough — `halopsa_status` must actually hit `/auth/token`.
+ */
+export async function probeHaloAuth(): Promise<AuthProbeResult> {
+  const creds = getCredentials();
+  if (!creds) {
+    return { configured: false };
+  }
+
+  const target = creds.tenant || creds.baseUrl || "unknown";
+
+  try {
+    const client = await getClient();
+    await client.clients.list({ pageSize: 1, pageNo: 1 });
+    return { configured: true, healthy: true, target };
+  } catch (error) {
+    if (isTokenMintFailure(error)) {
+      return {
+        configured: true,
+        healthy: false,
+        target,
+        error: formatToolError(error),
+      };
+    }
+    // Token mint succeeded (or was not the failure). Do not call credentials OK
+    // on a later API error, but do not treat it as a mint failure either.
+    return {
+      configured: true,
+      healthy: true,
+      target,
+      warning: formatToolError(error),
+    };
+  }
 }
 
 /**
