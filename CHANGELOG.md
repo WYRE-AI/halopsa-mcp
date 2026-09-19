@@ -9,6 +9,20 @@
 
 ### Fixed
 
+- **HaloPSA token mint could 500 while `halopsa_status` still said credentials
+  were OK (WYREAI-370).** Status only checked that a client id, secret, and
+  tenant/base URL were *present* — it never called `/auth/token`. Data tools
+  (`tickets_list`, `clients_list`, …) then failed with a bare
+  `Failed to acquire token: 500` from `@wyre-ai/node-halopsa`, dropping the
+  upstream HTML body. Three connector-side fixes:
+  1. Pass hosted `tenant` through to the SDK as `tenantId` so the
+     client-credentials request includes Halo's required OAuth tenant
+     parameter (previously used only to build `https://{tenant}.halopsa.com`).
+  2. `halopsa_status` probes token mint with a cheap authenticated call and
+     returns `isError` with `Token mint: FAILED` instead of a false-green
+     "Configured".
+  3. Tool errors from a failed mint are typed as `AUTH_FAILED` and include
+     the HTTP status plus a stripped upstream body, not a bare 500.
 - **`halopsa_status` and the unknown-tool error advised calling `halopsa_navigate`
   to discover tools without qualification.** Conduit suppresses `*_navigate` /
   `*_back` at the gateway (tier filtering lives in the grant resolver, which the

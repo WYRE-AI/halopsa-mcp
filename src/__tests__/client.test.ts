@@ -8,11 +8,20 @@ import {
   getClient,
   clearClient,
   cleanCredential,
+  resolveOAuthTenantId,
+  formatToolError,
+  summarizeErrorBody,
+  isTokenMintFailure,
+  probeHaloAuth,
 } from "../utils/client.js";
 
-// Mock the node-halopsa library
-vi.mock("@wyre-ai/node-halopsa", () => ({
-  HaloPsaClient: vi.fn().mockImplementation(function (config) { return ({
+const { HaloPsaClientMock } = vi.hoisted(() => ({
+  HaloPsaClientMock: vi.fn(),
+}));
+
+/** Build the minimal mocked HaloPSA client surface used by this test suite. */
+function createMockClient(config: unknown) {
+  return {
     config,
     tickets: {
       list: vi.fn(),
@@ -37,7 +46,11 @@ vi.mock("@wyre-ai/node-halopsa", () => ({
       list: vi.fn(),
       get: vi.fn(),
     },
-  }) }),
+  };
+}
+
+vi.mock("@wyre-ai/node-halopsa", () => ({
+  HaloPsaClient: HaloPsaClientMock,
 }));
 
 describe("HaloPSA Client Utilities", () => {
@@ -47,6 +60,10 @@ describe("HaloPSA Client Utilities", () => {
     // Reset environment variables before each test
     process.env = { ...originalEnv };
     clearClient();
+    // vitest mockReset clears the constructor implementation; put it back.
+    HaloPsaClientMock.mockImplementation(function (this: unknown, config: unknown) {
+      return createMockClient(config);
+    });
   });
 
   afterEach(() => {
@@ -315,6 +332,147 @@ describe("HaloPSA Client Utilities", () => {
       const firstClientAgain = await getClient();
 
       expect(firstClientAgain).not.toBe(firstClient);
+    });
+  });
+
+  // WYREAI-370: hosted Halo requires an OAuth `tenant` parameter on
+  // POST /auth/token. The SDK only sends it when `tenantId` is set; this
+  // connector used to pass `tenant` solely to build the hostname.
+  describe("resolveOAuthTenantId", () => {
+    it("uses a bare tenant subdomain as the OAuth tenant id", () => {
+      expect(
+        resolveOAuthTenantId({ tenant: "wyretechnology" })
+      ).toBe("wyretechnology");
+    });
+
+    it("strips a hosted URL supplied as the tenant field", () => {
+      expect(
+        resolveOAuthTenantId({
+          tenant: "https://wyretechnology.halopsa.com/",
+        })
+      ).toBe("wyretechnology");
+    });
+
+    it("derives the tenant id from a hosted base URL", () => {
+      expect(
+        resolveOAuthTenantId({
+          baseUrl: "https://wyretechnology.haloitsm.com",
+        })
+      ).toBe("wyretechnology");
+    });
+
+    it("does not invent a tenant id for a custom-domain base URL", () => {
+      expect(
+        resolveOAuthTenantId({ baseUrl: "https://support.acme.example" })
+      ).toBeUndefined();
+    });
+  });
+
+  describe("getClient tenantId", () => {
+    it("passes tenantId so the SDK includes tenant on the token request", async () => {
+      process.env.HALOPSA_CLIENT_ID = "test-id";
+      process.env.HALOPSA_CLIENT_SECRET = "test-secret";
+      process.env.HALOPSA_TENANT = "wyretechnology";
+
+      await getClient();
+
+      expect(HaloPsaClientMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clientId: "test-id",
+          tenant: "wyretechnology",
+          tenantId: "wyretechnology",
+        })
+      );
+    });
+  });
+
+  describe("token-mint error typing", () => {
+    it("detects SDK authentication errors as token mint failures", () => {
+      const error = Object.assign(new Error("Failed to acquire token: 500 "), {
+        name: "HaloPsaAuthenticationError",
+        statusCode: 500,
+      });
+      expect(isTokenMintFailure(error)).toBe(true);
+      expect(isTokenMintFailure(new Error("ticket not found"))).toBe(false);
+    });
+
+    it("strips Halo's HTML 500 page down to the visible error text", () => {
+      const html =
+        "<html><head><title>Halo - Error</title></head><body>Sorry, something went wrong. Please try again later.</body></html>";
+      expect(summarizeErrorBody(html)).toMatch(/Sorry, something went wrong/);
+      expect(summarizeErrorBody(html)).not.toMatch(/<html/);
+    });
+
+    it("formats a token 500 as AUTH_FAILED with upstream body, not a bare 500", () => {
+      const error = Object.assign(new Error("Failed to acquire token: 500 "), {
+        name: "HaloPsaAuthenticationError",
+        statusCode: 500,
+        response:
+          "<html><title>Halo - Error</title><body>Sorry, something went wrong. Please try again later.</body></html>",
+      });
+
+      const text = formatToolError(error);
+      expect(text).toMatch(/^AUTH_FAILED:/);
+      expect(text).toContain("HTTP 500");
+      expect(text).toContain("Sorry, something went wrong");
+      expect(text).not.toMatch(/^Error: Failed to acquire token: 500\s*$/);
+    });
+  });
+
+  describe("probeHaloAuth", () => {
+    it("reports unconfigured when credentials are missing", async () => {
+      delete process.env.HALOPSA_CLIENT_ID;
+      delete process.env.HALOPSA_CLIENT_SECRET;
+      delete process.env.HALOPSA_TENANT;
+      delete process.env.HALOPSA_BASE_URL;
+
+      await expect(probeHaloAuth()).resolves.toEqual({ configured: false });
+    });
+
+    it("reports healthy when a cheap authenticated call succeeds", async () => {
+      process.env.HALOPSA_CLIENT_ID = "test-id";
+      process.env.HALOPSA_CLIENT_SECRET = "test-secret";
+      process.env.HALOPSA_TENANT = "wyretechnology";
+
+      const client = await getClient();
+      vi.spyOn(client.clients, "list").mockResolvedValue({
+        record_count: 0,
+        clients: [],
+      });
+
+      await expect(probeHaloAuth()).resolves.toEqual({
+        configured: true,
+        healthy: true,
+        target: "wyretechnology",
+      });
+    });
+
+    it("reports unhealthy AUTH_FAILED when token mint returns 500", async () => {
+      process.env.HALOPSA_CLIENT_ID = "test-id";
+      process.env.HALOPSA_CLIENT_SECRET = "test-secret";
+      process.env.HALOPSA_TENANT = "wyretechnology";
+
+      const client = await getClient();
+      const authError = Object.assign(
+        new Error("Failed to acquire token: 500 "),
+        {
+          name: "HaloPsaAuthenticationError",
+          statusCode: 500,
+          response:
+            "<html><title>Halo - Error</title><body>Sorry, something went wrong.</body></html>",
+        }
+      );
+      vi.spyOn(client.clients, "list").mockRejectedValue(authError);
+
+      const probe = await probeHaloAuth();
+      expect(probe).toMatchObject({
+        configured: true,
+        healthy: false,
+        target: "wyretechnology",
+      });
+      expect(probe.configured && !probe.healthy ? probe.error : "").toMatch(
+        /^AUTH_FAILED:/
+      );
     });
   });
 });

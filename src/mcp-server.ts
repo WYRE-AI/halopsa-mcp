@@ -20,9 +20,11 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { getDomainHandler, getAvailableDomains } from "./domains/index.js";
 import { isDomainName, type DomainName } from "./utils/types.js";
 import {
-  getCredentials,
   cleanCredential,
+  probeHaloAuth,
+  formatToolError,
   type HaloPsaCredentials,
+  type AuthProbeResult,
 } from "./utils/client.js";
 import { registerPromptHandlers } from "./prompts.js";
 import { registerResourceHandlers } from "./resources.js";
@@ -76,16 +78,66 @@ const navigateTool: Tool = {
 };
 
 /**
- * Status tool - shows credentials status and available domains
+ * Status tool - shows credentials status, token-mint health, and available domains
  */
 const statusTool: Tool = {
   name: "halopsa_status",
-  description: "Show credentials status and available domains",
+  description:
+    "Show credentials presence, whether OAuth token mint succeeds, and available domains. Reports unhealthy (isError) if credentials are missing or token mint fails — presence alone is not OK.",
   inputSchema: {
     type: "object",
     properties: {},
   },
 };
+
+const STATUS_FOOTER = `Call conduit__my_access to see which tools you can use under the gateway, or halopsa_navigate to browse all tools by domain when running standalone.`;
+
+/**
+ * Build the `halopsa_status` tool result from an auth probe.
+ *
+ * Token mint is probed separately from credential presence so a configured
+ * client that cannot acquire a token is never reported as healthy (WYREAI-370).
+ */
+export function buildStatusToolResult(probe: AuthProbeResult): {
+  content: Array<{ type: "text"; text: string }>;
+  isError?: boolean;
+} {
+  const domains = `Available domains: ${getAvailableDomains().join(", ")}`;
+
+  if (!probe.configured) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `HaloPSA MCP Server Status\n\nCredentials: NOT CONFIGURED - Please set environment variables\nToken mint: skipped\n${domains}\n\n${STATUS_FOOTER}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  if (!probe.healthy) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `HaloPSA MCP Server Status\n\nCredentials: present (tenant: ${probe.target})\nToken mint: FAILED\n${probe.error ?? "AUTH_FAILED: token mint failed"}\n\n${domains}\n\n${STATUS_FOOTER}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  const warning = probe.warning ? `\nAPI probe: ${probe.warning}` : "";
+  return {
+    content: [
+      {
+        type: "text",
+        text: `HaloPSA MCP Server Status\n\nCredentials: present (tenant: ${probe.target})\nToken mint: OK${warning}\n${domains}\n\n${STATUS_FOOTER}`,
+      },
+    ],
+  };
+}
 
 /**
  * Map from domain name to its tool definitions (loaded lazily)
@@ -258,19 +310,7 @@ export function createMcpServer(): Server {
       }
 
       if (name === "halopsa_status") {
-        const creds = getCredentials();
-        const credStatus = creds
-          ? `Configured (tenant: ${creds.tenant || creds.baseUrl})`
-          : "NOT CONFIGURED - Please set environment variables";
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: `HaloPSA MCP Server Status\n\nCredentials: ${credStatus}\nAvailable domains: ${getAvailableDomains().join(", ")}\n\nCall conduit__my_access to see which tools you can use under the gateway, or halopsa_navigate to browse all tools by domain when running standalone.`,
-            },
-          ],
-        };
+        return buildStatusToolResult(await probeHaloAuth());
       }
 
       // Route to appropriate domain handler
@@ -308,9 +348,8 @@ export function createMcpServer(): Server {
         isError: true,
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
       return {
-        content: [{ type: "text", text: `Error: ${message}` }],
+        content: [{ type: "text", text: formatToolError(error) }],
         isError: true,
       };
     }
