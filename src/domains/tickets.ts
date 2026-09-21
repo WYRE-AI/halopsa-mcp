@@ -138,7 +138,8 @@ function getTools(): Tool[] {
     },
     {
       name: "halopsa_tickets_add_action",
-      description: "Add note to ticket",
+      description:
+        "Add note to ticket. Halo rejects actions with no outcome, so a hidden/private note defaults to outcome \"Private Note\" when not supplied — pass outcome explicitly for a visible note.",
       _meta: TICKET_CARD_META,
       inputSchema: {
         type: "object" as const,
@@ -151,6 +152,8 @@ function getTools(): Tool[] {
           },
           outcome: {
             type: "string",
+            description:
+              "Required by Halo's API for every action; defaults to \"Private Note\" when hidden_from_user is true and this is omitted.",
           },
           timetaken: {
             type: "number",
@@ -304,12 +307,16 @@ async function handleCall(
 
     case "halopsa_tickets_add_action": {
       const ticketId = args.ticket_id as number;
+      const hiddenFromUser = args.hidden_from_user as boolean | undefined;
+      const outcome =
+        (args.outcome as string | undefined) ??
+        (hiddenFromUser ? "Private Note" : undefined);
       const action = await client.actions.create({
         ticket_id: ticketId,
         note: args.note as string,
-        outcome: args.outcome as string | undefined,
+        outcome,
         timetaken: args.timetaken as number | undefined,
-        hiddenfromuser: args.hidden_from_user as boolean | undefined,
+        hiddenfromuser: hiddenFromUser,
       });
 
       return {

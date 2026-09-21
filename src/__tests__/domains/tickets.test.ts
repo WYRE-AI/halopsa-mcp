@@ -320,6 +320,37 @@ describe("Tickets Domain Handler", () => {
           hiddenfromuser: true,
         });
       });
+
+      it("should default outcome to 'Private Note' for a hidden action with no outcome supplied", async () => {
+        await ticketsHandler.handleCall("halopsa_tickets_add_action", {
+          ticket_id: 1,
+          note: "Internal note",
+          hidden_from_user: true,
+        });
+
+        expect(mockActionsCreate).toHaveBeenCalledWith({
+          ticket_id: 1,
+          note: "Internal note",
+          outcome: "Private Note",
+          timetaken: undefined,
+          hiddenfromuser: true,
+        });
+      });
+
+      it("should leave outcome undefined for a visible action with no outcome supplied", async () => {
+        await ticketsHandler.handleCall("halopsa_tickets_add_action", {
+          ticket_id: 1,
+          note: "Visible note",
+        });
+
+        expect(mockActionsCreate).toHaveBeenCalledWith({
+          ticket_id: 1,
+          note: "Visible note",
+          outcome: undefined,
+          timetaken: undefined,
+          hiddenfromuser: undefined,
+        });
+      });
     });
 
     describe("unknown tool", () => {
