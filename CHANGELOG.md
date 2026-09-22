@@ -9,6 +9,32 @@
 
 ### Fixed
 
+- **`serverInfo.version` was hardcoded `1.0.0` while the image label was the
+  release version (for example 1.7.9).** Release builds already pass that
+  version as the Docker `VERSION` build-arg. The image now stores it in
+  `MCP_SERVER_VERSION`, and the MCP handshake reports that value. Local
+  runs without the stamp report `package.json`'s version instead.
+- **Container health check probed `localhost`, which fails closed.** The
+  image `HEALTHCHECK` and Compose healthcheck called
+  `wget --spider http://localhost:8080/health`. The server binds
+  `MCP_HTTP_HOST=0.0.0.0` (IPv4 only). Inside the image, `localhost`
+  resolves to `::1` first, so the probe gets connection refused and the
+  container stays unhealthy. Both probes now use `127.0.0.1` and
+  `MCP_HTTP_PORT` (default 8080). Same probe bug as ninjaone-mcp.
+- **`halopsa_tickets_list` always requests a numbered page and the total
+  count.** HaloPSA ignores `page_size` unless `page_no` is on the same
+  request, and then returns its own first page of 50. A following
+  `page_no=2` starts at offset `limit`, so the records between that short
+  first page and the offset are never returned. The tool now sends page 1
+  when `page_no` is omitted, and `count=true` so `record_count` is the
+  total number of matching tickets on every call (not the length of the
+  page). A page number that is not a whole number of 1 or greater is
+  rejected and does not call Halo. The result also includes `page_no` and
+  `page_size`. Date-occurred
+  filters are still forwarded for the Halo client to translate into
+  `datesearch` / `startdate` / `enddate` — those wrapper names are not Halo
+  query parameters and are ignored if sent unchanged. Full-text `search`
+  remains on the tool.
 - **`halopsa_status` and the unknown-tool error advised calling `halopsa_navigate`
   to discover tools without qualification.** Conduit suppresses `*_navigate` /
   `*_back` at the gateway (tier filtering lives in the grant resolver, which the
