@@ -26,6 +26,7 @@ import {
 } from "./utils/client.js";
 import { registerPromptHandlers } from "./prompts.js";
 import { registerResourceHandlers } from "./resources.js";
+import { mcpServerVersion } from "./server-version.js";
 
 export type { HaloPsaCredentials };
 
@@ -196,7 +197,7 @@ export function createMcpServer(): Server {
   const server = new Server(
     {
       name: "halopsa-mcp",
-      version: "1.0.0",
+      version: mcpServerVersion(),
     },
     {
       capabilities: {

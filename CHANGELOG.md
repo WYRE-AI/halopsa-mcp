@@ -9,6 +9,11 @@
 
 ### Fixed
 
+- **`serverInfo.version` was hardcoded `1.0.0` while the image label was the
+  release version (for example 1.7.9).** Release builds already pass that
+  version as the Docker `VERSION` build-arg. The image now stores it in
+  `MCP_SERVER_VERSION`, and the MCP handshake reports that value. Local
+  runs without the stamp report `package.json`'s version instead.
 - **Container health check probed `localhost`, which fails closed.** The
   image `HEALTHCHECK` and Compose healthcheck called
   `wget --spider http://localhost:8080/health`. The server binds

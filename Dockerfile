@@ -29,4 +29,10 @@ ENV MCP_TRANSPORT=http
 ENV MCP_HTTP_PORT=8080
 ENV MCP_HTTP_HOST=0.0.0.0
 ENV AUTH_MODE=env
+# Release builds pass VERSION equal to the image tag / OCI version label.
+# serverInfo.version reads MCP_SERVER_VERSION so it matches that label
+# instead of a hardcoded 1.0.0. Empty when unset; the process then falls
+# back to package.json.
+ARG VERSION
+ENV MCP_SERVER_VERSION=${VERSION}
 CMD ["node", "dist/index.js"]
