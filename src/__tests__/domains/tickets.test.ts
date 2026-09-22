@@ -209,6 +209,21 @@ describe("Tickets Domain Handler", () => {
         );
       });
 
+      it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+        "rejects page_no %s without calling Halo",
+        async (pageNo) => {
+          const result = await ticketsHandler.handleCall("halopsa_tickets_list", {
+            client_id: 467,
+            limit: 100,
+            page_no: pageNo,
+          });
+
+          expect(result.isError).toBe(true);
+          expect(result.content[0].text).toMatch(/page_no must be an integer/);
+          expect(mockTicketsList).not.toHaveBeenCalled();
+        }
+      );
+
       it("keeps an explicit later page on the same page size", async () => {
         await ticketsHandler.handleCall("halopsa_tickets_list", {
           client_id: 467,

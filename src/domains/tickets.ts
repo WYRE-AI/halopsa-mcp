@@ -193,7 +193,13 @@ async function handleCall(
       // count=true asks Halo for the total match count; without it,
       // record_count is the number of tickets in this page on calls where
       // pagination is not fully active, and the total on calls where it is.
-      const pageNo = (args.page_no as number | undefined) ?? 1;
+      const pageNo = resolvePageNo(args.page_no);
+      if (typeof pageNo !== "number") {
+        return {
+          content: [{ type: "text", text: pageNo.error }],
+          isError: true,
+        };
+      }
       const dateStart = args.dateoccurred_start as string | undefined;
       const dateEnd = args.dateoccurred_end as string | undefined;
       const search = args.search as string | undefined;
@@ -345,6 +351,23 @@ async function handleCall(
         isError: true,
       };
   }
+}
+
+/**
+ * Page 1 is the default. Any other value must be a whole number of at least 1.
+ * Zero, fractions, and non-numbers are rejected here so they never become a
+ * Halo request.
+ */
+function resolvePageNo(
+  value: unknown
+): number | { error: string } {
+  if (value === undefined) return 1;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+    return {
+      error: "page_no must be an integer greater than or equal to 1",
+    };
+  }
+  return value;
 }
 
 export const ticketsHandler: DomainHandler = {

@@ -28,7 +28,9 @@
   first page and the offset are never returned. The tool now sends page 1
   when `page_no` is omitted, and `count=true` so `record_count` is the
   total number of matching tickets on every call (not the length of the
-  page). The result also includes `page_no` and `page_size`. Date-occurred
+  page). A page number that is not a whole number of 1 or greater is
+  rejected and does not call Halo. The result also includes `page_no` and
+  `page_size`. Date-occurred
   filters are still forwarded for the Halo client to translate into
   `datesearch` / `startdate` / `enddate` — those wrapper names are not Halo
   query parameters and are ignored if sent unchanged. Full-text `search`

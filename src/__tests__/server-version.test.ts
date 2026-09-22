@@ -21,13 +21,14 @@ describe("mcpServerVersion", () => {
     expect(mcpServerVersion()).toBe("1.7.9");
   });
 
-  it("ignores a blank stamp and reads package.json", () => {
+  it("uses the bundled package version when the image stamp is blank", () => {
     vi.stubEnv("MCP_SERVER_VERSION", "   ");
     const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8")) as {
       version: string;
     };
     expect(mcpServerVersion()).toBe(pkg.version);
     expect(mcpServerVersion()).not.toBe("1.0.0");
+    expect(mcpServerVersion()).not.toBe("0.0.0");
   });
 
   it("is wired from the Docker VERSION build-arg", () => {
