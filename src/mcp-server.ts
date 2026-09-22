@@ -26,6 +26,7 @@ import {
 } from "./utils/client.js";
 import { registerPromptHandlers } from "./prompts.js";
 import { registerResourceHandlers } from "./resources.js";
+import { HaloPsaValidationError } from "@wyre-ai/node-halopsa";
 import { mcpServerVersion } from "./server-version.js";
 
 export type { HaloPsaCredentials };
@@ -309,6 +310,15 @@ export function createMcpServer(): Server {
         isError: true,
       };
     } catch (error) {
+      if (error instanceof HaloPsaValidationError && error.errors.length > 0) {
+        const fields = error.errors
+          .map((e) => `${e.field}: ${e.message}`)
+          .join("; ");
+        return {
+          content: [{ type: "text", text: `Error: Validation failed — ${fields}` }],
+          isError: true,
+        };
+      }
       const message = error instanceof Error ? error.message : String(error);
       return {
         content: [{ type: "text", text: `Error: ${message}` }],
