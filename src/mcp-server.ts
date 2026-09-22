@@ -27,6 +27,7 @@ import {
 import { registerPromptHandlers } from "./prompts.js";
 import { registerResourceHandlers } from "./resources.js";
 import { HaloPsaValidationError } from "@wyre-ai/node-halopsa";
+import { mcpServerVersion } from "./server-version.js";
 
 export type { HaloPsaCredentials };
 
@@ -197,7 +198,7 @@ export function createMcpServer(): Server {
   const server = new Server(
     {
       name: "halopsa-mcp",
-      version: "1.0.0",
+      version: mcpServerVersion(),
     },
     {
       capabilities: {

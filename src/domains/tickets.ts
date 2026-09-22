@@ -17,7 +17,10 @@ function getTools(): Tool[] {
   return [
     {
       name: "halopsa_tickets_list",
-      description: "List tickets with optional filters by client, status, agent, open/closed state, date occurred range, or full-text search",
+      description:
+        "List tickets with optional filters by client, status, agent, open/closed state, date occurred range, or full-text search. " +
+        "Results are one page. record_count is the total number of matching tickets, not the number of tickets in this page. " +
+        "page_no and page_size in the result identify that page.",
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -38,11 +41,13 @@ function getTools(): Tool[] {
           },
           dateoccurred_start: {
             type: "string",
-            description: "ISO-8601 start date for tickets (e.g. 2026-04-06T00:00:00Z)",
+            description:
+              "ISO-8601 start of the date-occurred window (e.g. 2026-04-06T00:00:00Z). Tickets outside the window are excluded.",
           },
           dateoccurred_end: {
             type: "string",
-            description: "ISO-8601 end date for tickets",
+            description:
+              "ISO-8601 end of the date-occurred window. Tickets outside the window are excluded.",
           },
           search: {
             type: "string",
@@ -50,11 +55,13 @@ function getTools(): Tool[] {
           },
           limit: {
             type: "number",
-            description: "Maximum number of results (default: 50)",
+            description:
+              "Page size (default 50). Applied on every page, including the first.",
           },
           page_no: {
             type: "number",
-            description: "Page number (1-indexed) for pagination",
+            description:
+              "Page number, starting at 1 (default 1). The next page continues directly after this page.",
           },
         },
       },
@@ -181,7 +188,21 @@ async function handleCall(
   switch (toolName) {
     case "halopsa_tickets_list": {
       const limit = (args.limit as number) || 50;
-      const pageNo = args.page_no as number | undefined;
+      // HaloPSA ignores page_size unless page_no is on the same request, and
+      // then uses its own page size (50) for that implicit first page. A
+      // later page_no=2 starts at offset (page_no-1)*limit, so the records
+      // between the short first page and that offset are never returned.
+      // Defaulting to page 1 makes `limit` apply on the first call too.
+      // count=true asks Halo for the total match count; without it,
+      // record_count is the number of tickets in this page on calls where
+      // pagination is not fully active, and the total on calls where it is.
+      const pageNo = resolvePageNo(args.page_no);
+      if (typeof pageNo !== "number") {
+        return {
+          content: [{ type: "text", text: pageNo.error }],
+          isError: true,
+        };
+      }
       const dateStart = args.dateoccurred_start as string | undefined;
       const dateEnd = args.dateoccurred_end as string | undefined;
       const search = args.search as string | undefined;
@@ -217,11 +238,16 @@ async function handleCall(
         agent_id: args.agent_id as number | undefined,
         open_only: openOnly,
         closed_only: closedOnly,
+        // Forwarded for the Halo client to translate into
+        // datesearch=dateoccured plus startdate/enddate. The wrapper names
+        // are not Halo query parameters; sending them unchanged is accepted
+        // and then ignored.
         dateoccurred_start: dateStart,
         dateoccurred_end: dateEnd,
         search: search,
         pageSize: limit,
         pageNo: pageNo,
+        count: true,
       });
 
       return {
@@ -231,6 +257,8 @@ async function handleCall(
             text: JSON.stringify(
               {
                 record_count: response.record_count,
+                page_no: pageNo,
+                page_size: limit,
                 tickets: response.tickets,
               },
               null,
@@ -330,6 +358,23 @@ async function handleCall(
         isError: true,
       };
   }
+}
+
+/**
+ * Page 1 is the default. Any other value must be a whole number of at least 1.
+ * Zero, fractions, and non-numbers are rejected here so they never become a
+ * Halo request.
+ */
+function resolvePageNo(
+  value: unknown
+): number | { error: string } {
+  if (value === undefined) return 1;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+    return {
+      error: "page_no must be an integer greater than or equal to 1",
+    };
+  }
+  return value;
 }
 
 export const ticketsHandler: DomainHandler = {

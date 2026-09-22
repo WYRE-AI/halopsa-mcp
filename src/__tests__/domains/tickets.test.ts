@@ -128,7 +128,11 @@ describe("Tickets Domain Handler", () => {
       expect(listTool?.inputSchema.properties).toHaveProperty("status_id");
       expect(listTool?.inputSchema.properties).toHaveProperty("open_only");
       expect(listTool?.inputSchema.properties).toHaveProperty("limit");
+      expect(listTool?.inputSchema.properties).toHaveProperty("page_no");
+      expect(listTool?.inputSchema.properties).toHaveProperty("dateoccurred_start");
+      expect(listTool?.inputSchema.properties).toHaveProperty("dateoccurred_end");
       expect(listTool?.inputSchema.properties).toHaveProperty("search");
+      expect(listTool?.description).toMatch(/record_count is the total/i);
     });
 
     it("halopsa_tickets_get should require ticket_id", () => {
@@ -177,8 +181,103 @@ describe("Tickets Domain Handler", () => {
           agent_id: undefined,
           open_only: true,
           closed_only: undefined,
+          dateoccurred_start: undefined,
+          dateoccurred_end: undefined,
+          search: undefined,
           pageSize: 10,
+          pageNo: 1,
+          count: true,
         });
+      });
+
+      // HaloPSA ignores page_size on a request that omits page_no and returns
+      // its own first page of 50. page_no=2 then starts at offset limit,
+      // so the records between that short page and the offset never appear.
+      it("sends page 1 with the requested page size when page_no is omitted", async () => {
+        await ticketsHandler.handleCall("halopsa_tickets_list", {
+          client_id: 467,
+          limit: 100,
+        });
+
+        expect(mockTicketsList).toHaveBeenCalledWith(
+          expect.objectContaining({
+            client_id: 467,
+            pageSize: 100,
+            pageNo: 1,
+            count: true,
+          })
+        );
+      });
+
+      it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+        "rejects page_no %s without calling Halo",
+        async (pageNo) => {
+          const result = await ticketsHandler.handleCall("halopsa_tickets_list", {
+            client_id: 467,
+            limit: 100,
+            page_no: pageNo,
+          });
+
+          expect(result.isError).toBe(true);
+          expect(result.content[0].text).toMatch(/page_no must be an integer/);
+          expect(mockTicketsList).not.toHaveBeenCalled();
+        }
+      );
+
+      it("keeps an explicit later page on the same page size", async () => {
+        await ticketsHandler.handleCall("halopsa_tickets_list", {
+          client_id: 467,
+          limit: 100,
+          page_no: 2,
+        });
+
+        expect(mockTicketsList).toHaveBeenCalledWith(
+          expect.objectContaining({
+            client_id: 467,
+            pageSize: 100,
+            pageNo: 2,
+            count: true,
+          })
+        );
+      });
+
+      // dateoccurred_start/end are not Halo query names. The client
+      // translates them; this tool must still forward the window rather
+      // than drop it.
+      it("forwards the date-occurred window", async () => {
+        await ticketsHandler.handleCall("halopsa_tickets_list", {
+          dateoccurred_start: "2025-08-01T00:00:00Z",
+          dateoccurred_end: "2026-05-01T00:00:00Z",
+        });
+
+        expect(mockTicketsList).toHaveBeenCalledWith(
+          expect.objectContaining({
+            dateoccurred_start: "2025-08-01T00:00:00Z",
+            dateoccurred_end: "2026-05-01T00:00:00Z",
+            pageNo: 1,
+            count: true,
+          })
+        );
+      });
+
+      // record_count is the total number of matches. It must not be replaced
+      // with the length of the page that came back.
+      it("reports record_count as the total match count, distinct from the page length", async () => {
+        mockTicketsList.mockResolvedValueOnce({
+          record_count: 385,
+          tickets: Array.from({ length: 100 }, (_, i) => ({ id: i + 1 })),
+        });
+
+        const result = await ticketsHandler.handleCall("halopsa_tickets_list", {
+          client_id: 467,
+          limit: 100,
+        });
+
+        const data = JSON.parse(result.content[0].text);
+        expect(data.record_count).toBe(385);
+        expect(data.tickets).toHaveLength(100);
+        expect(data.page_no).toBe(1);
+        expect(data.page_size).toBe(100);
       });
 
       // Regression: search was accepted by HaloPSA's API but never exposed
