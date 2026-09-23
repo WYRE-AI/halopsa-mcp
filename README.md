@@ -38,7 +38,7 @@ A Model Context Protocol (MCP) server for interacting with HaloPSA, featuring a 
 This MCP server uses a **hierarchical tool loading approach** instead of exposing all tools upfront:
 
 1. **Navigation Phase**: Initially exposes only a navigation tool (`halopsa_navigate`)
-2. **Domain Selection**: User selects a domain (tickets, clients, assets, agents, invoices)
+2. **Domain Selection**: User selects a domain (tickets, clients, assets, agents, invoices, categories)
 3. **Domain Tools**: Server exposes domain-specific tools after selection
 4. **Lazy Loading**: Domain handlers and the HaloPSA client are loaded on-demand
 
@@ -133,9 +133,16 @@ Manage support tickets, create new tickets, update status, add actions/notes.
 Tools:
 - `halopsa_tickets_list` - List tickets with filters
 - `halopsa_tickets_get` - Get ticket details
-- `halopsa_tickets_create` - Create a new ticket
-- `halopsa_tickets_update` - Update an existing ticket
+- `halopsa_tickets_create` - Create a new ticket (optional `category_1`–`category_4`)
+- `halopsa_tickets_update` - Update an existing ticket (optional `category_1`–`category_4`)
 - `halopsa_tickets_add_action` - Add a note/action to a ticket
+
+### Categories
+Look up Halo ticket categories so triage can assign `category_1`–`category_4` (the category name, matched to its level).
+
+Tools:
+- `halopsa_categories_list` - List ticket categories
+- `halopsa_categories_get` - Get a category by ID
 
 ### Clients
 Manage companies/clients in HaloPSA.
