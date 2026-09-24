@@ -74,6 +74,7 @@ describe("Categories Domain Handler", () => {
       expect(listTool?.inputSchema.properties).toHaveProperty("inactive");
       expect(listTool?.inputSchema.properties).toHaveProperty("search");
       expect(listTool?.inputSchema.properties).toHaveProperty("limit");
+      expect(listTool?.inputSchema.properties).toHaveProperty("page_no");
     });
 
     it("halopsa_categories_get should require category_id", () => {
@@ -96,11 +97,16 @@ describe("Categories Domain Handler", () => {
         expect(result.isError).toBeUndefined();
         const data = JSON.parse(result.content[0].text);
         expect(data.record_count).toBe(2);
+        expect(data.page_no).toBe(1);
+        expect(data.page_size).toBe(50);
         expect(data.categories).toHaveLength(2);
         expect(mockCategoriesList).toHaveBeenCalledWith({
           inactive: undefined,
           search: undefined,
           pageSize: 50,
+          pageNo: 1,
+          pageinate: true,
+          count: true,
         });
       });
 
@@ -109,14 +115,38 @@ describe("Categories Domain Handler", () => {
           inactive: true,
           search: "laptop",
           limit: 10,
+          page_no: 2,
         });
 
         expect(mockCategoriesList).toHaveBeenCalledWith({
           inactive: true,
           search: "laptop",
           pageSize: 10,
+          pageNo: 2,
+          pageinate: true,
+          count: true,
         });
       });
+
+      it.each([0, -1, 1.5, "10", Number.NaN, Number.POSITIVE_INFINITY])(
+        "rejects invalid limit %s before calling Halo",
+        async (limit) => {
+          const result = await categoriesHandler.handleCall("halopsa_categories_list", { limit });
+          expect(result.isError).toBe(true);
+          expect(result.content[0].text).toMatch(/limit/);
+          expect(mockCategoriesList).not.toHaveBeenCalled();
+        }
+      );
+
+      it.each([0, -1, 1.5, "2", Number.NaN, Number.POSITIVE_INFINITY])(
+        "rejects invalid page_no %s before calling Halo",
+        async (page_no) => {
+          const result = await categoriesHandler.handleCall("halopsa_categories_list", { page_no });
+          expect(result.isError).toBe(true);
+          expect(result.content[0].text).toMatch(/page_no/);
+          expect(mockCategoriesList).not.toHaveBeenCalled();
+        }
+      );
     });
 
     describe("halopsa_categories_get", () => {
@@ -131,6 +161,18 @@ describe("Categories Domain Handler", () => {
         expect(data.name).toBe("Hardware");
         expect(mockCategoriesGet).toHaveBeenCalledWith(1);
       });
+
+      it.each([undefined, "1", 0, 1.5, Number.NaN])(
+        "rejects invalid category_id %s before calling Halo",
+        async (category_id) => {
+          const result = await categoriesHandler.handleCall("halopsa_categories_get", {
+            category_id,
+          });
+          expect(result.isError).toBe(true);
+          expect(result.content[0].text).toMatch(/category_id/);
+          expect(mockCategoriesGet).not.toHaveBeenCalled();
+        }
+      );
     });
 
     describe("unknown tool", () => {

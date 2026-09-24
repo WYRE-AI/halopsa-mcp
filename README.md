@@ -141,7 +141,7 @@ Tools:
 Look up Halo ticket categories so triage can assign `category_1`–`category_4` (the category name, matched to its level).
 
 Tools:
-- `halopsa_categories_list` - List ticket categories
+- `halopsa_categories_list` - List one page of ticket categories (`limit` defaults to 50; `page_no` starts at 1)
 - `halopsa_categories_get` - Get a category by ID
 
 ### Clients

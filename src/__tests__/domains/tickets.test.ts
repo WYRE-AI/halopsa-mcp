@@ -330,6 +330,15 @@ describe("Tickets Domain Handler", () => {
           expect.objectContaining({ category_1: "Hardware" })
         );
       });
+
+      it("rejects a non-string category filter before calling Halo", async () => {
+        const result = await ticketsHandler.handleCall("halopsa_tickets_list", {
+          category_1: 123,
+        });
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toMatch(/category_1/);
+        expect(mockTicketsList).not.toHaveBeenCalled();
+      });
     });
 
     describe("halopsa_tickets_get", () => {
@@ -418,6 +427,21 @@ describe("Tickets Domain Handler", () => {
           })
         );
       });
+
+      it.each(["category_1", "category_2", "category_3", "category_4"])(
+        "rejects non-string %s before creating a ticket",
+        async (field) => {
+          const result = await ticketsHandler.handleCall("halopsa_tickets_create", {
+            summary: "New ticket",
+            client_id: 5,
+            tickettype_id: 1,
+            [field]: 123,
+          });
+          expect(result.isError).toBe(true);
+          expect(result.content[0].text).toContain(field);
+          expect(mockTicketsCreate).not.toHaveBeenCalled();
+        }
+      );
     });
 
     describe("halopsa_tickets_update", () => {
@@ -471,6 +495,19 @@ describe("Tickets Domain Handler", () => {
           })
         );
       });
+
+      it.each(["category_1", "category_2", "category_3", "category_4"])(
+        "rejects non-string %s before updating a ticket",
+        async (field) => {
+          const result = await ticketsHandler.handleCall("halopsa_tickets_update", {
+            ticket_id: 1,
+            [field]: false,
+          });
+          expect(result.isError).toBe(true);
+          expect(result.content[0].text).toContain(field);
+          expect(mockTicketsUpdate).not.toHaveBeenCalled();
+        }
+      );
     });
 
     describe("halopsa_tickets_add_action", () => {

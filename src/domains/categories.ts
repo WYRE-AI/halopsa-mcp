@@ -9,6 +9,11 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { DomainHandler, CallToolResult } from "../utils/types.js";
 import { getClient } from "../utils/client.js";
+import {
+  categoryGetSchema,
+  categoryListSchema,
+  invalidCategoryInput,
+} from "../utils/category-input.js";
 
 /**
  * Get category domain tools
@@ -18,7 +23,7 @@ function getTools(): Tool[] {
     {
       name: "halopsa_categories_list",
       description:
-        "List Halo ticket categories. Pass a category's name as category_1–category_4 on ticket create or update, matching the category level (1–4).",
+        "List one page of Halo ticket categories. Pass a category's name as category_1–category_4 on ticket create or update, matching the category level (1–4).",
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -31,8 +36,14 @@ function getTools(): Tool[] {
             description: "Full-text search across category names",
           },
           limit: {
-            type: "number",
-            description: "Maximum number of results (default: 50)",
+            type: "integer",
+            minimum: 1,
+            description: "Page size (default: 50)",
+          },
+          page_no: {
+            type: "integer",
+            minimum: 1,
+            description: "Page number, starting at 1 (default: 1)",
           },
         },
       },
@@ -44,7 +55,8 @@ function getTools(): Tool[] {
         type: "object" as const,
         properties: {
           category_id: {
-            type: "number",
+            type: "integer",
+            minimum: 1,
           },
         },
         required: ["category_id"],
@@ -64,12 +76,18 @@ async function handleCall(
 
   switch (toolName) {
     case "halopsa_categories_list": {
-      const limit = (args.limit as number) || 50;
-      const response = await client.categories.list({
-        inactive: args.inactive as boolean | undefined,
-        search: args.search as string | undefined,
+      const parsed = categoryListSchema.safeParse(args);
+      if (!parsed.success) return invalidCategoryInput(parsed.error);
+      const { limit, page_no: pageNo, inactive, search } = parsed.data;
+      const request = {
+        inactive,
+        search,
         pageSize: limit,
-      });
+        pageNo,
+        pageinate: true,
+        count: true,
+      };
+      const response = await client.categories.list(request);
 
       return {
         content: [
@@ -78,6 +96,8 @@ async function handleCall(
             text: JSON.stringify(
               {
                 record_count: response.record_count,
+                page_no: pageNo,
+                page_size: limit,
                 categories: response.categories,
               },
               null,
@@ -89,8 +109,9 @@ async function handleCall(
     }
 
     case "halopsa_categories_get": {
-      const categoryId = args.category_id as number;
-      const category = await client.categories.get(categoryId);
+      const parsed = categoryGetSchema.safeParse(args);
+      if (!parsed.success) return invalidCategoryInput(parsed.error);
+      const category = await client.categories.get(parsed.data.category_id);
 
       return {
         content: [{ type: "text", text: JSON.stringify(category, null, 2) }],
@@ -105,6 +126,7 @@ async function handleCall(
   }
 }
 
+/** Handles category-domain tool discovery and validated category lookup calls. */
 export const categoriesHandler: DomainHandler = {
   getTools,
   handleCall,
