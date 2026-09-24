@@ -9,6 +9,22 @@ import type { DomainHandler, CallToolResult } from "../utils/types.js";
 import { getClient } from "../utils/client.js";
 import { elicitSelection } from "../utils/elicitation.js";
 import { buildTicketCard, TICKET_CARD_META } from "../card.builder.js";
+import { invalidCategoryInput, ticketCategorySchema } from "../utils/category-input.js";
+
+/**
+ * Halo stores ticket categories as strings (the category name), not ids.
+ * halopsa_categories_list returns those names with a level of 1–4.
+ */
+function haloCategoryProperty(level: 1 | 2 | 3 | 4) {
+  return {
+    type: "string" as const,
+    description: `Halo category value (level ${level}). Use halopsa_categories_list to discover values.`,
+  };
+}
+
+function ticketCategories(args: Record<string, unknown>) {
+  return ticketCategorySchema.safeParse(args);
+}
 
 /**
  * Get ticket domain tools
@@ -52,6 +68,11 @@ function getTools(): Tool[] {
           search: {
             type: "string",
             description: "Full-text search across tickets, in place of a multi-page sweep",
+          },
+          category_1: {
+            type: "string",
+            description:
+              "Filter by Halo category level 1. Use halopsa_categories_list to discover values.",
           },
           limit: {
             type: "number",
@@ -111,6 +132,10 @@ function getTools(): Tool[] {
           site_id: {
             type: "number",
           },
+          category_1: haloCategoryProperty(1),
+          category_2: haloCategoryProperty(2),
+          category_3: haloCategoryProperty(3),
+          category_4: haloCategoryProperty(4),
         },
         required: ["summary", "client_id", "tickettype_id"],
       },
@@ -139,6 +164,10 @@ function getTools(): Tool[] {
           agent_id: {
             type: "number",
           },
+          category_1: haloCategoryProperty(1),
+          category_2: haloCategoryProperty(2),
+          category_3: haloCategoryProperty(3),
+          category_4: haloCategoryProperty(4),
         },
         required: ["ticket_id"],
       },
@@ -184,6 +213,8 @@ async function handleCall(
 
   switch (toolName) {
     case "halopsa_tickets_list": {
+      const categories = ticketCategories(args);
+      if (!categories.success) return invalidCategoryInput(categories.error);
       const limit = (args.limit as number) || 50;
       // HaloPSA ignores page_size unless page_no is on the same request, and
       // then uses its own page size (50) for that implicit first page. A
@@ -203,11 +234,12 @@ async function handleCall(
       const dateStart = args.dateoccurred_start as string | undefined;
       const dateEnd = args.dateoccurred_end as string | undefined;
       const search = args.search as string | undefined;
+      const category1 = categories.data.category_1;
       let openOnly = args.open_only as boolean | undefined;
       const closedOnly = args.closed_only as boolean | undefined;
 
       const hasFilters =
-        args.client_id || args.status_id || args.agent_id ||
+        args.client_id || args.status_id || args.agent_id || category1 ||
         args.open_only !== undefined || args.closed_only !== undefined ||
         dateStart || dateEnd || search;
 
@@ -242,6 +274,7 @@ async function handleCall(
         dateoccurred_start: dateStart,
         dateoccurred_end: dateEnd,
         search: search,
+        category_1: category1,
         pageSize: limit,
         pageNo: pageNo,
         count: true,
@@ -300,6 +333,8 @@ async function handleCall(
     }
 
     case "halopsa_tickets_create": {
+      const categories = ticketCategories(args);
+      if (!categories.success) return invalidCategoryInput(categories.error);
       const ticket = await client.tickets.create({
         summary: args.summary as string,
         details: args.details as string | undefined,
@@ -308,6 +343,10 @@ async function handleCall(
         priority_id: args.priority_id as number | undefined,
         agent_id: args.agent_id as number | undefined,
         site_id: args.site_id as number | undefined,
+        category_1: categories.data.category_1,
+        category_2: categories.data.category_2,
+        category_3: categories.data.category_3,
+        category_4: categories.data.category_4,
       });
 
       return {
@@ -316,6 +355,8 @@ async function handleCall(
     }
 
     case "halopsa_tickets_update": {
+      const categories = ticketCategories(args);
+      if (!categories.success) return invalidCategoryInput(categories.error);
       const ticketId = args.ticket_id as number;
       const ticket = await client.tickets.update(ticketId, {
         summary: args.summary as string | undefined,
@@ -323,6 +364,10 @@ async function handleCall(
         status_id: args.status_id as number | undefined,
         priority_id: args.priority_id as number | undefined,
         agent_id: args.agent_id as number | undefined,
+        category_1: categories.data.category_1,
+        category_2: categories.data.category_2,
+        category_3: categories.data.category_3,
+        category_4: categories.data.category_4,
       });
 
       return {
