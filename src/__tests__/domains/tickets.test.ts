@@ -132,6 +132,7 @@ describe("Tickets Domain Handler", () => {
       expect(listTool?.inputSchema.properties).toHaveProperty("dateoccurred_start");
       expect(listTool?.inputSchema.properties).toHaveProperty("dateoccurred_end");
       expect(listTool?.inputSchema.properties).toHaveProperty("search");
+      expect(listTool?.inputSchema.properties).toHaveProperty("category_1");
       expect(listTool?.description).toMatch(/record_count is the total/i);
     });
 
@@ -151,6 +152,30 @@ describe("Tickets Domain Handler", () => {
       expect(createTool?.inputSchema.required).toContain("summary");
       expect(createTool?.inputSchema.required).toContain("client_id");
       expect(createTool?.inputSchema.required).toContain("tickettype_id");
+      expect(createTool?.inputSchema.required).not.toContain("category_1");
+      for (const level of [1, 2, 3, 4]) {
+        const field = createTool?.inputSchema.properties?.[`category_${level}`] as
+          | { type?: string; description?: string }
+          | undefined;
+        expect(field?.type).toBe("string");
+        expect(field?.description).toMatch(/halopsa_categories_list/);
+      }
+    });
+
+    it("halopsa_tickets_update should accept optional category values", () => {
+      const tools = ticketsHandler.getTools();
+      const updateTool = tools.find((t) => t.name === "halopsa_tickets_update");
+
+      expect(updateTool).toBeDefined();
+      expect(updateTool?.inputSchema.required).toEqual(["ticket_id"]);
+      for (const level of [1, 2, 3, 4]) {
+        const field = updateTool?.inputSchema.properties?.[`category_${level}`] as
+          | { type?: string; description?: string }
+          | undefined;
+        expect(field?.type).toBe("string");
+        expect(field?.description).toMatch(/Halo category value/);
+        expect(field?.description).toMatch(/halopsa_categories_list/);
+      }
     });
   });
 
@@ -184,6 +209,7 @@ describe("Tickets Domain Handler", () => {
           dateoccurred_start: undefined,
           dateoccurred_end: undefined,
           search: undefined,
+          category_1: undefined,
           pageSize: 10,
           pageNo: 1,
           count: true,
@@ -292,6 +318,27 @@ describe("Tickets Domain Handler", () => {
           expect.objectContaining({ search: "printer offline" })
         );
       });
+
+      // TicketListParams only filters on category_1. category_2–4 are
+      // assignment fields, not list filters.
+      it("forwards category_1 as a list filter", async () => {
+        await ticketsHandler.handleCall("halopsa_tickets_list", {
+          category_1: "Hardware",
+        });
+
+        expect(mockTicketsList).toHaveBeenCalledWith(
+          expect.objectContaining({ category_1: "Hardware" })
+        );
+      });
+
+      it("rejects a non-string category filter before calling Halo", async () => {
+        const result = await ticketsHandler.handleCall("halopsa_tickets_list", {
+          category_1: 123,
+        });
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toMatch(/category_1/);
+        expect(mockTicketsList).not.toHaveBeenCalled();
+      });
     });
 
     describe("halopsa_tickets_get", () => {
@@ -353,8 +400,48 @@ describe("Tickets Domain Handler", () => {
           priority_id: 3,
           agent_id: 10,
           site_id: 2,
+          category_1: undefined,
+          category_2: undefined,
+          category_3: undefined,
+          category_4: undefined,
         });
       });
+
+      it("forwards category_1–category_4 to the client", async () => {
+        await ticketsHandler.handleCall("halopsa_tickets_create", {
+          summary: "New ticket",
+          client_id: 5,
+          tickettype_id: 1,
+          category_1: "Hardware",
+          category_2: "Laptop",
+          category_3: "Screen",
+          category_4: "Cracked",
+        });
+
+        expect(mockTicketsCreate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            category_1: "Hardware",
+            category_2: "Laptop",
+            category_3: "Screen",
+            category_4: "Cracked",
+          })
+        );
+      });
+
+      it.each(["category_1", "category_2", "category_3", "category_4"])(
+        "rejects non-string %s before creating a ticket",
+        async (field) => {
+          const result = await ticketsHandler.handleCall("halopsa_tickets_create", {
+            summary: "New ticket",
+            client_id: 5,
+            tickettype_id: 1,
+            [field]: 123,
+          });
+          expect(result.isError).toBe(true);
+          expect(result.content[0].text).toContain(field);
+          expect(mockTicketsCreate).not.toHaveBeenCalled();
+        }
+      );
     });
 
     describe("halopsa_tickets_update", () => {
@@ -384,8 +471,43 @@ describe("Tickets Domain Handler", () => {
           status_id: 2,
           priority_id: 1,
           agent_id: undefined,
+          category_1: undefined,
+          category_2: undefined,
+          category_3: undefined,
+          category_4: undefined,
         });
       });
+
+      it("forwards category_1–category_4 to the client", async () => {
+        await ticketsHandler.handleCall("halopsa_tickets_update", {
+          ticket_id: 1,
+          category_1: "Software",
+          category_2: "Email",
+        });
+
+        expect(mockTicketsUpdate).toHaveBeenCalledWith(
+          1,
+          expect.objectContaining({
+            category_1: "Software",
+            category_2: "Email",
+            category_3: undefined,
+            category_4: undefined,
+          })
+        );
+      });
+
+      it.each(["category_1", "category_2", "category_3", "category_4"])(
+        "rejects non-string %s before updating a ticket",
+        async (field) => {
+          const result = await ticketsHandler.handleCall("halopsa_tickets_update", {
+            ticket_id: 1,
+            [field]: false,
+          });
+          expect(result.isError).toBe(true);
+          expect(result.content[0].text).toContain(field);
+          expect(mockTicketsUpdate).not.toHaveBeenCalled();
+        }
+      );
     });
 
     describe("halopsa_tickets_add_action", () => {
