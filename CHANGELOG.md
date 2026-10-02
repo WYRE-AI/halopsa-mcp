@@ -9,6 +9,13 @@
 
 ### Fixed
 
+- **`halopsa_tickets_add_action` silently failed on a hidden action with no
+  `outcome` supplied.** Halo's API rejects any posted action lacking an
+  `outcome` field, even when `hidden_from_user` is set, and the rejection
+  read as intermittent since it only surfaced when the caller omitted the
+  field. Hidden actions now default `outcome` to `"Private Note"` when not
+  supplied, and a Halo validation rejection now names the specific field it
+  failed on instead of a generic error message.
 - **`serverInfo.version` was hardcoded `1.0.0` while the image label was the
   release version (for example 1.7.9).** Release builds already pass that
   version as the Docker `VERSION` build-arg. The image now stores it in
