@@ -2,6 +2,11 @@
 
 ### Added
 
+- **Ticket category lookup and assignment.** `halopsa_categories_list` and
+  `halopsa_categories_get` look up Halo category names. Ticket create and
+  update accept optional `category_1`–`category_4`. `halopsa_tickets_list`
+  filters on `category_1` only and rejects `category_2`, `category_3`, and
+  `category_4` instead of ignoring them.
 - **`halopsa_tickets_list` now supports full-text `search`.** HaloPSA's
   `/Tickets` endpoint already accepts a `search` query parameter; it just
   wasn't exposed on this tool, forcing a multi-page sweep for what a single

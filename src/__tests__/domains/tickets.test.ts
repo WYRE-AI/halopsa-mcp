@@ -133,6 +133,10 @@ describe("Tickets Domain Handler", () => {
       expect(listTool?.inputSchema.properties).toHaveProperty("dateoccurred_end");
       expect(listTool?.inputSchema.properties).toHaveProperty("search");
       expect(listTool?.inputSchema.properties).toHaveProperty("category_1");
+      expect(listTool?.inputSchema.properties).not.toHaveProperty("category_2");
+      expect(listTool?.inputSchema.properties).not.toHaveProperty("category_3");
+      expect(listTool?.inputSchema.properties).not.toHaveProperty("category_4");
+      expect(listTool?.description).toMatch(/category_2, category_3, and category_4 are not list filters/);
       expect(listTool?.description).toMatch(/record_count is the total/i);
     });
 
@@ -320,7 +324,7 @@ describe("Tickets Domain Handler", () => {
       });
 
       // TicketListParams only filters on category_1. category_2–4 are
-      // assignment fields, not list filters.
+      // assignment fields, not list filters, and must not be silently dropped.
       it("forwards category_1 as a list filter", async () => {
         await ticketsHandler.handleCall("halopsa_tickets_list", {
           category_1: "Hardware",
@@ -339,6 +343,20 @@ describe("Tickets Domain Handler", () => {
         expect(result.content[0].text).toMatch(/category_1/);
         expect(mockTicketsList).not.toHaveBeenCalled();
       });
+
+      it.each(["category_2", "category_3", "category_4"] as const)(
+        "rejects %s on list before calling Halo",
+        async (field) => {
+          const result = await ticketsHandler.handleCall("halopsa_tickets_list", {
+            category_1: "Hardware",
+            [field]: "Ignored",
+          });
+          expect(result.isError).toBe(true);
+          expect(result.content[0].text).toContain(field);
+          expect(result.content[0].text).toMatch(/not a list filter/);
+          expect(mockTicketsList).not.toHaveBeenCalled();
+        }
+      );
     });
 
     describe("halopsa_tickets_get", () => {

@@ -9,7 +9,11 @@ import type { DomainHandler, CallToolResult } from "../utils/types.js";
 import { getClient } from "../utils/client.js";
 import { elicitSelection } from "../utils/elicitation.js";
 import { buildTicketCard, TICKET_CARD_META } from "../card.builder.js";
-import { invalidCategoryInput, ticketCategorySchema } from "../utils/category-input.js";
+import {
+  invalidCategoryInput,
+  ticketCategorySchema,
+  ticketListCategorySchema,
+} from "../utils/category-input.js";
 
 /**
  * Halo stores ticket categories as strings (the category name), not ids.
@@ -26,6 +30,10 @@ function ticketCategories(args: Record<string, unknown>) {
   return ticketCategorySchema.safeParse(args);
 }
 
+function ticketListCategories(args: Record<string, unknown>) {
+  return ticketListCategorySchema.safeParse(args);
+}
+
 /**
  * Get ticket domain tools
  */
@@ -34,7 +42,8 @@ function getTools(): Tool[] {
     {
       name: "halopsa_tickets_list",
       description:
-        "List tickets with optional filters by client, status, agent, open/closed state, date occurred range, or full-text search. " +
+        "List tickets with optional filters by client, status, agent, category level 1, open/closed state, date occurred range, or full-text search. " +
+        "category_2, category_3, and category_4 are not list filters and are rejected. " +
         "Results are one page. record_count is the total number of matching tickets, not the number of tickets in this page. " +
         "page_no and page_size in the result identify that page.",
       inputSchema: {
@@ -72,7 +81,7 @@ function getTools(): Tool[] {
           category_1: {
             type: "string",
             description:
-              "Filter by Halo category level 1. Use halopsa_categories_list to discover values.",
+              "Filter by Halo category level 1 only. category_2–category_4 are not list filters. Use halopsa_categories_list to discover values.",
           },
           limit: {
             type: "number",
@@ -213,7 +222,7 @@ async function handleCall(
 
   switch (toolName) {
     case "halopsa_tickets_list": {
-      const categories = ticketCategories(args);
+      const categories = ticketListCategories(args);
       if (!categories.success) return invalidCategoryInput(categories.error);
       const limit = (args.limit as number) || 50;
       // HaloPSA ignores page_size unless page_no is on the same request, and

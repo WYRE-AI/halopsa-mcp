@@ -131,7 +131,7 @@ docker run -e HALOPSA_CLIENT_ID=xxx -e HALOPSA_CLIENT_SECRET=xxx -e HALOPSA_TENA
 Manage support tickets, create new tickets, update status, add actions/notes.
 
 Tools:
-- `halopsa_tickets_list` - List tickets with filters
+- `halopsa_tickets_list` - List tickets with filters (`category_1` only; `category_2`–`category_4` are rejected)
 - `halopsa_tickets_get` - Get ticket details
 - `halopsa_tickets_create` - Create a new ticket (optional `category_1`–`category_4`)
 - `halopsa_tickets_update` - Update an existing ticket (optional `category_1`–`category_4`)
