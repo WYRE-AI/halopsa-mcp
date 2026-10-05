@@ -47,9 +47,9 @@
     "registry": "https://npm.pkg.github.com"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "@wyre-ai/node-halopsa": "^1.1.0",
-    "zod": "^4.3.6"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
