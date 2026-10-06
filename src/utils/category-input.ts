@@ -41,9 +41,13 @@ export const ticketCategorySchema = z.object({
  * being dropped. Create and update still use {@link ticketCategorySchema}.
  */
 function unsupportedListCategory(level: 2 | 3 | 4) {
+  // zod 4.6 tightened z.undefined() to require the key be present (even if
+  // explicitly undefined) — a missing key now fails with "expected
+  // nonoptional". .optional() restores the original behavior: a missing key
+  // and an explicit undefined both pass, while any real value is rejected.
   return z.undefined({
     error: `not a list filter. halopsa_tickets_list only filters on category_1; assign category_${level} with ticket create or update`,
-  });
+  }).optional();
 }
 
 /** Validates ticket-list category input and rejects `category_2`–`category_4`. */
