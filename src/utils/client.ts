@@ -133,14 +133,15 @@ export function getCredentials(): HaloPsaCredentials | null {
  * `https://{tenant}.halopsa.com` and never set `tenantId`, so hosted token
  * mints went out without the OAuth tenant selector.
  *
- * Returns the bare hosted subdomain when we can derive one, otherwise
- * undefined (custom-domain / on-prem instances omit the param).
+ * Returns a hosted subdomain, or a bare tenant label, when we can derive
+ * one. Otherwise undefined: custom-domain URLs, hosted root domains
+ * (`halopsa.com`), and other non-labels are not sent as `tenantId`.
  */
 export function resolveOAuthTenantId(
   creds: Pick<HaloPsaCredentials, "tenant" | "baseUrl">
 ): string | undefined {
   if (creds.tenant) {
-    return hostedTenantLabel(creds.tenant) ?? creds.tenant.trim();
+    return hostedTenantLabel(creds.tenant);
   }
   if (creds.baseUrl) {
     try {
@@ -152,10 +153,23 @@ export function resolveOAuthTenantId(
   return undefined;
 }
 
-/** Extract a hosted Halo tenant label from a bare label or hosted URL. */
+/** A single DNS label. Hosted Halo tenant names are subdomains, not URLs. */
+const BARE_TENANT_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
+
+/**
+ * Extract a hosted Halo tenant label from a bare label or hosted URL.
+ * Custom-domain hosts and hosted root domains return undefined.
+ */
 function hostedTenantLabel(tenant: string): string | undefined {
-  const host = tenant.trim().replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
-  if (!host.includes(".")) return host;
+  const host = tenant
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/.*$/, "")
+    .replace(/[?#].*$/, "");
+  if (!host) return undefined;
+  if (!host.includes(".")) {
+    return BARE_TENANT_LABEL.test(host) ? host : undefined;
+  }
   return tenantFromHost(host);
 }
 
@@ -332,6 +346,9 @@ export function formatToolError(error: unknown): string {
   }
 
   const parts = [`Error: ${message}`];
+  if (statusCode) {
+    parts.push(`HTTP ${statusCode}`);
+  }
   if (body && !message.includes(body)) {
     parts.push(body);
   }
@@ -351,21 +368,25 @@ export async function probeHaloAuth(): Promise<AuthProbeResult> {
 
   const target = creds.tenant || creds.baseUrl || "unknown";
 
+  let client: HaloPsaClient;
   try {
-    const client = await getClient();
+    client = await getClient();
+  } catch (error) {
+    // Construction never reaches /auth/token. Do not report mint OK.
+    return failedProbe(target, error);
+  }
+
+  try {
     await client.clients.list({ pageSize: 1, pageNo: 1 });
     return { configured: true, healthy: true, target };
   } catch (error) {
     if (isTokenMintFailure(error)) {
-      return {
-        configured: true,
-        healthy: false,
-        target,
-        error: formatToolError(error),
-      };
+      return failedProbe(target, error);
     }
-    // Token mint succeeded (or was not the failure). Do not call credentials OK
-    // on a later API error, but do not treat it as a mint failure either.
+    // @wyre-ai/node-halopsa mints inside the first API call and throws
+    // HaloPsaAuthenticationError for every mint failure, including network
+    // errors. A different error from clients.list means getToken() already
+    // resolved, so the mint itself succeeded and the API call did not.
     return {
       configured: true,
       healthy: true,
@@ -373,6 +394,16 @@ export async function probeHaloAuth(): Promise<AuthProbeResult> {
       warning: formatToolError(error),
     };
   }
+}
+
+/** Credentials are present, but token mint did not succeed. */
+function failedProbe(target: string, error: unknown): AuthProbeResult {
+  return {
+    configured: true,
+    healthy: false,
+    target,
+    error: formatToolError(error),
+  };
 }
 
 /**

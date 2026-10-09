@@ -366,6 +366,19 @@ describe("HaloPSA Client Utilities", () => {
         resolveOAuthTenantId({ baseUrl: "https://support.acme.example" })
       ).toBeUndefined();
     });
+
+    it("does not pass a custom-domain URL through as the OAuth tenant id", () => {
+      expect(
+        resolveOAuthTenantId({ tenant: "https://support.acme.example/" })
+      ).toBeUndefined();
+    });
+
+    it("does not pass a hosted root domain through as the OAuth tenant id", () => {
+      expect(resolveOAuthTenantId({ tenant: "halopsa.com" })).toBeUndefined();
+      expect(
+        resolveOAuthTenantId({ tenant: "https://haloitsm.com/" })
+      ).toBeUndefined();
+    });
   });
 
   describe("getClient tenantId", () => {
@@ -416,6 +429,19 @@ describe("HaloPSA Client Utilities", () => {
       expect(text).toContain("HTTP 500");
       expect(text).toContain("Sorry, something went wrong");
       expect(text).not.toMatch(/^Error: Failed to acquire token: 500\s*$/);
+    });
+
+    it("includes the vendor HTTP status on non-token failures", () => {
+      const error = Object.assign(new Error("Forbidden"), {
+        statusCode: 403,
+        response: { message: "missing permission" },
+      });
+
+      const text = formatToolError(error);
+      expect(text).toContain("Error: Forbidden");
+      expect(text).toContain("HTTP 403");
+      expect(text).toContain("missing permission");
+      expect(text).not.toMatch(/^AUTH_FAILED:/);
     });
   });
 
@@ -472,6 +498,50 @@ describe("HaloPSA Client Utilities", () => {
       });
       expect(probe.configured && !probe.healthy ? probe.error : "").toMatch(
         /^AUTH_FAILED:/
+      );
+    });
+
+    it("does not report token mint OK when the client cannot be constructed", async () => {
+      process.env.HALOPSA_CLIENT_ID = "test-id";
+      process.env.HALOPSA_CLIENT_SECRET = "test-secret";
+      process.env.HALOPSA_TENANT = "wyretechnology";
+
+      HaloPsaClientMock.mockImplementation(() => {
+        throw new Error("invalid base URL");
+      });
+
+      const probe = await probeHaloAuth();
+      expect(probe).toMatchObject({
+        configured: true,
+        healthy: false,
+        target: "wyretechnology",
+      });
+      expect(probe.configured && !probe.healthy ? probe.error : "").toMatch(
+        /invalid base URL/
+      );
+      expect(probe.configured && !probe.healthy ? probe.error : "").not.toMatch(
+        /Token mint: OK/
+      );
+    });
+
+    it("keeps token mint OK when the API call fails after authentication", async () => {
+      process.env.HALOPSA_CLIENT_ID = "test-id";
+      process.env.HALOPSA_CLIENT_SECRET = "test-secret";
+      process.env.HALOPSA_TENANT = "wyretechnology";
+
+      const client = await getClient();
+      vi.spyOn(client.clients, "list").mockRejectedValue(
+        Object.assign(new Error("Forbidden"), { statusCode: 403 })
+      );
+
+      const probe = await probeHaloAuth();
+      expect(probe).toMatchObject({
+        configured: true,
+        healthy: true,
+        target: "wyretechnology",
+      });
+      expect(probe.configured && probe.healthy ? probe.warning : "").toContain(
+        "HTTP 403"
       );
     });
   });
