@@ -18,10 +18,67 @@ export interface HaloPsaCredentials {
   baseUrl?: string;
 }
 
+/**
+ * Outcome of probing whether configured credentials can actually mint a token.
+ *
+ * `halopsa_status` used to report "Configured" from credential *presence*
+ * alone, which is how WYREAI-370 looked green while every data tool returned
+ * `Failed to acquire token: 500`.
+ */
+export type AuthProbeResult =
+  | { configured: false }
+  | {
+      configured: true;
+      healthy: boolean;
+      target: string;
+      error?: string;
+      warning?: string;
+      /**
+       * Credentials are present, but this error was not a recognized token-mint
+       * failure and not a post-token API error. Token mint is not OK.
+       */
+      unknown?: boolean;
+    };
+
 // An unresolved MCPB/DXT manifest placeholder, e.g. "${user_config.halopsa_base_url}".
 // Desktop hosts inject the config template verbatim when its optional user_config
 // field is left blank, so the literal string arrives in the env var / header.
 const CONFIG_PLACEHOLDER = /^\$\{.*\}$/;
+
+/**
+ * Hosted Halo domains a tenant subdomain may be paired with.
+ * Kept in lockstep with `@wyre-ai/node-halopsa` `HALO_HOSTED_DOMAINS` so we
+ * can derive the OAuth `tenant` parameter from `https://{tenant}.halopsa.com`
+ * when the operator supplied only a base URL.
+ */
+const HALO_HOSTED_DOMAINS = [
+  "halopsa.com",
+  "haloitsm.com",
+  "haloservicedesk.com",
+  "nethelpdesk.com",
+];
+
+const TOKEN_MINT_FAILED = /failed to acquire token/i;
+const MAX_UPSTREAM_BODY_CHARS = 400;
+const REDACTED = "REDACTED";
+
+/**
+ * SDK errors thrown only after `AuthManager.getToken()` has resolved.
+ * `HaloPsaAuthenticationError` is intentionally absent: that is a mint failure.
+ * `HaloPsaConfigurationError` is absent too: it is raised before any token request.
+ */
+const POST_TOKEN_API_ERROR_NAMES = new Set([
+  "HaloPsaError",
+  "HaloPsaForbiddenError",
+  "HaloPsaNotFoundError",
+  "HaloPsaValidationError",
+  "HaloPsaBadRequestError",
+  "HaloPsaRateLimitError",
+  "HaloPsaServerError",
+]);
+
+const SENSITIVE_QUERY_KEY =
+  /^(?:client[_-]?secret|client[_-]?id|api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|password|passwd|token|code)$/i;
 
 /**
  * Normalise a single credential value read from an env var or gateway header.
@@ -92,6 +149,65 @@ export function getCredentials(): HaloPsaCredentials | null {
 }
 
 /**
+ * Hosted Halo requires a `tenant` parameter on the client-credentials token
+ * request (`POST /auth/token?tenant=…`, also accepted in the form body).
+ *
+ * `@wyre-ai/node-halopsa` only sends that parameter when `tenantId` is set.
+ * This connector historically passed `tenant` solely to build
+ * `https://{tenant}.halopsa.com` and never set `tenantId`, so hosted token
+ * mints went out without the OAuth tenant selector.
+ *
+ * Returns a hosted subdomain, or a bare tenant label, when we can derive
+ * one. Otherwise undefined: custom-domain URLs, hosted root domains
+ * (`halopsa.com`), and other non-labels are not sent as `tenantId`.
+ */
+export function resolveOAuthTenantId(
+  creds: Pick<HaloPsaCredentials, "tenant" | "baseUrl">
+): string | undefined {
+  if (creds.tenant) {
+    return hostedTenantLabel(creds.tenant);
+  }
+  if (creds.baseUrl) {
+    try {
+      return tenantFromHost(new URL(creds.baseUrl).hostname);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+/** A single DNS label. Hosted Halo tenant names are subdomains, not URLs. */
+const BARE_TENANT_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
+
+/**
+ * Extract a hosted Halo tenant label from a bare label or hosted URL.
+ * Custom-domain hosts and hosted root domains return undefined.
+ */
+function hostedTenantLabel(tenant: string): string | undefined {
+  const host = tenant
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/.*$/, "")
+    .replace(/[?#].*$/, "");
+  if (!host) return undefined;
+  if (!host.includes(".")) {
+    return BARE_TENANT_LABEL.test(host) ? host : undefined;
+  }
+  return tenantFromHost(host);
+}
+
+/** Derive the tenant subdomain from a recognized Halo-hosted hostname. */
+function tenantFromHost(host: string): string | undefined {
+  const hostname = host.toLowerCase();
+  const domain = HALO_HOSTED_DOMAINS.find(
+    (d) => hostname === d || hostname.endsWith(`.${d}`)
+  );
+  if (!domain || hostname === domain) return undefined;
+  return hostname.slice(0, -(domain.length + 1));
+}
+
+/**
  * Client cache keyed by credential fingerprint so different tenants
  * get separate client instances, but the same tenant reuses its client.
  *
@@ -138,11 +254,13 @@ export async function getClient(): Promise<HaloPsaClient> {
   }
 
   const { HaloPsaClient } = await import("@wyre-ai/node-halopsa");
+  const tenantId = resolveOAuthTenantId(creds);
   client = new HaloPsaClient({
     clientId: creds.clientId,
     clientSecret: creds.clientSecret,
     tenant: creds.tenant,
     baseUrl: creds.baseUrl,
+    ...(tenantId ? { tenantId } : {}),
   });
 
   if (clientCache.size >= MAX_CLIENT_CACHE_SIZE) {
@@ -154,6 +272,233 @@ export async function getClient(): Promise<HaloPsaClient> {
   clientCache.set(key, client);
 
   return client;
+}
+
+/**
+ * True when the thrown error is the SDK failing to mint an OAuth token,
+ * including Halo's documented-odd 500 HTML page on unknown client ids.
+ *
+ * Duck-typed: `instanceof HaloPsaAuthenticationError` is unreliable across
+ * the dynamic `import("@wyre-ai/node-halopsa")` used by `getClient()`.
+ */
+export function isTokenMintFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.name === "HaloPsaAuthenticationError") return true;
+  return TOKEN_MINT_FAILED.test(error.message);
+}
+
+/** True when the SDK threw this only after a token had already been minted. */
+function isPostTokenApiError(error: unknown): boolean {
+  return error instanceof Error && POST_TOKEN_API_ERROR_NAMES.has(error.name);
+}
+
+/** Read a positive numeric HTTP status code from an SDK error-like value. */
+function errorStatusCode(error: unknown): number | undefined {
+  const status = (error as { statusCode?: unknown } | null)?.statusCode;
+  return typeof status === "number" && status > 0 ? status : undefined;
+}
+
+/** Read the upstream response payload from an SDK error-like value. */
+function errorResponse(error: unknown): unknown {
+  return (error as { response?: unknown } | null)?.response;
+}
+
+/**
+ * Collapse an upstream token-endpoint body into a short, secret-free snippet.
+ * Halo's 500 path returns a ~280KB HTML error page whose visible text is
+ * "Sorry, something went wrong" — that one line is the diagnosis, not the
+ * markup.
+ */
+export function summarizeErrorBody(raw: unknown): string | undefined {
+  if (raw == null) return undefined;
+
+  let text: string;
+  if (typeof raw === "string") {
+    text = raw;
+  } else {
+    try {
+      text = JSON.stringify(raw);
+    } catch {
+      return undefined;
+    }
+  }
+
+  const trimmed = text.trim();
+  if (!trimmed) return undefined;
+
+  if (/<[a-z][\s\S]*>/i.test(trimmed)) {
+    const stripped = trimmed
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    text = stripped || "HTML error page (no JSON error body)";
+  } else {
+    text = trimmed;
+  }
+
+  text = redactSensitive(text);
+
+  if (text.length > MAX_UPSTREAM_BODY_CHARS) {
+    return `${text.slice(0, MAX_UPSTREAM_BODY_CHARS)}…`;
+  }
+  return text;
+}
+
+/**
+ * Remove credentials from operator-facing error text.
+ *
+ * The Halo diagnostic sentence stays. Values that are secrets, tokens,
+ * client ids, auth headers, or credentialed request URLs are replaced.
+ * A bare `token: 500` (the SDK's status phrase) is left alone.
+ */
+export function redactSensitive(text: string): string {
+  let out = text;
+  out = out.replace(
+    /\b(authorization|x-api-key|api-key|x-auth-token)\s*[:=]\s*(?:bearer|basic|token)?\s*\S+/gi,
+    `$1: ${REDACTED}`
+  );
+  out = out.replace(/\bBearer\s+[A-Za-z0-9\-._~+/]+=*/gi, `Bearer ${REDACTED}`);
+  out = out.replace(
+    /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g,
+    REDACTED
+  );
+  out = out.replace(
+    /((?:client[_-]?secret|client[_-]?id|api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|password|passwd|token))(\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s&"',}]+)/gi,
+    (match, key: string, sep: string, value: string) => {
+      if (/^token$/i.test(key) && !looksLikeCredential(value)) return match;
+      return `${key}${sep}${REDACTED}`;
+    }
+  );
+  out = out.replace(/\bhttps?:\/\/[^\s"'<>]+/gi, redactCredentialUrl);
+  return out;
+}
+
+/** True when a `token=` value is a credential rather than an HTTP status. */
+function looksLikeCredential(value: string): boolean {
+  const raw = value.replace(/^['"]|['"]$/g, "");
+  if (/^\d{1,3}$/.test(raw)) return false;
+  return raw.length >= 8;
+}
+
+/** Drop userinfo and sensitive query values. Leave credential-free URLs. */
+function redactCredentialUrl(raw: string): string {
+  const trimmed = raw.replace(/[),.;]+$/, "");
+  const suffix = raw.slice(trimmed.length);
+  try {
+    const url = new URL(trimmed);
+    let changed = false;
+    if (url.username || url.password) {
+      url.username = REDACTED;
+      url.password = REDACTED;
+      changed = true;
+    }
+    for (const key of [...url.searchParams.keys()]) {
+      if (SENSITIVE_QUERY_KEY.test(key)) {
+        url.searchParams.set(key, REDACTED);
+        changed = true;
+      }
+    }
+    return changed ? `${url.toString()}${suffix}` : raw;
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Render a thrown error as the text a tool call (or status probe) reports.
+ *
+ * Token-mint failures become a typed `AUTH_FAILED` block with the HTTP status
+ * and upstream body. The SDK used to surface only
+ * `Failed to acquire token: 500`, hiding Halo's HTML "Sorry, something went
+ * wrong" page on `.response`.
+ */
+export function formatToolError(error: unknown): string {
+  const message = redactSensitive(
+    error instanceof Error ? error.message : String(error)
+  );
+  const body = summarizeErrorBody(errorResponse(error));
+  const statusCode = errorStatusCode(error);
+
+  if (isTokenMintFailure(error)) {
+    const statusPart = statusCode ? ` HTTP ${statusCode}` : "";
+    const parts = [
+      `AUTH_FAILED: HaloPSA token mint failed${statusPart}.`,
+      message.trim(),
+    ];
+    if (body && !message.includes(body)) {
+      parts.push(`Upstream: ${body}`);
+    }
+    if (statusCode === 500) {
+      parts.push(
+        "Halo often returns HTTP 500 HTML (not 401 JSON) for an unknown client id, a client-credentials application with no login agent, or a hosted tenant missing the OAuth tenant parameter."
+      );
+    }
+    return parts.join("\n");
+  }
+
+  const headline = statusCode
+    ? `Error: ${message} (HTTP ${statusCode})`
+    : `Error: ${message}`;
+  const parts = [headline];
+  if (body && !message.includes(body)) {
+    parts.push(body);
+  }
+  return parts.join("\n");
+}
+
+/**
+ * Verify configured credentials can mint a token by making one cheap
+ * authenticated call. Token acquisition is lazy inside the SDK, so constructing
+ * `HaloPsaClient` is not enough — `halopsa_status` must actually hit `/auth/token`.
+ */
+export async function probeHaloAuth(): Promise<AuthProbeResult> {
+  const creds = getCredentials();
+  if (!creds) {
+    return { configured: false };
+  }
+
+  const target = creds.tenant || creds.baseUrl || "unknown";
+
+  let client: HaloPsaClient;
+  try {
+    client = await getClient();
+  } catch (error) {
+    // Construction never reaches /auth/token.
+    return probeFromError(target, error);
+  }
+
+  try {
+    await client.clients.list({ pageSize: 1, pageNo: 1 });
+    return { configured: true, healthy: true, target };
+  } catch (error) {
+    return probeFromError(target, error);
+  }
+}
+
+/**
+ * Classify a probe failure.
+ *
+ * Recognized mint failures are unhealthy. Named SDK API errors are thrown
+ * only after `getToken()` resolves, so those keep mint OK and carry a warning.
+ * Anything else has not proven a minted token and must not be reported OK.
+ */
+function probeFromError(target: string, error: unknown): AuthProbeResult {
+  const text = formatToolError(error);
+  if (isTokenMintFailure(error)) {
+    return { configured: true, healthy: false, target, error: text };
+  }
+  if (isPostTokenApiError(error)) {
+    return { configured: true, healthy: true, target, warning: text };
+  }
+  return {
+    configured: true,
+    healthy: false,
+    unknown: true,
+    target,
+    error: text,
+  };
 }
 
 /**
