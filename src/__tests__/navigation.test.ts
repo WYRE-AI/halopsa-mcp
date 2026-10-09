@@ -42,6 +42,13 @@ const { mockHandlers } = vi.hoisted(() => {
       ]),
       handleCall: vi.fn(),
     },
+    categories: {
+      getTools: vi.fn().mockReturnValue([
+        { name: "halopsa_categories_list", description: "List categories" },
+        { name: "halopsa_categories_get", description: "Get category" },
+      ]),
+      handleCall: vi.fn(),
+    },
   };
 
   return { mockHandlers };
@@ -66,6 +73,10 @@ vi.mock("../domains/agents.js", () => ({
 
 vi.mock("../domains/invoices.js", () => ({
   invoicesHandler: mockHandlers.invoices,
+}));
+
+vi.mock("../domains/categories.js", () => ({
+  categoriesHandler: mockHandlers.categories,
 }));
 
 import {
@@ -101,6 +112,10 @@ describe("Domain Navigation", () => {
       { name: "halopsa_invoices_list", description: "List invoices" },
       { name: "halopsa_invoices_get", description: "Get invoice" },
     ]);
+    mockHandlers.categories.getTools.mockReturnValue([
+      { name: "halopsa_categories_list", description: "List categories" },
+      { name: "halopsa_categories_get", description: "Get category" },
+    ]);
   });
 
   describe("getAvailableDomains", () => {
@@ -113,6 +128,7 @@ describe("Domain Navigation", () => {
         "assets",
         "agents",
         "invoices",
+        "categories",
       ]);
     });
 
@@ -131,6 +147,7 @@ describe("Domain Navigation", () => {
       expect(isDomainName("assets")).toBe(true);
       expect(isDomainName("agents")).toBe(true);
       expect(isDomainName("invoices")).toBe(true);
+      expect(isDomainName("categories")).toBe(true);
     });
 
     it("should return false for invalid domain names", () => {
@@ -173,6 +190,13 @@ describe("Domain Navigation", () => {
 
     it("should load invoices domain handler", async () => {
       const handler = await getDomainHandler("invoices");
+
+      expect(handler).toBeDefined();
+      expect(handler.getTools()).toHaveLength(2);
+    });
+
+    it("should load categories domain handler", async () => {
+      const handler = await getDomainHandler("categories");
 
       expect(handler).toBeDefined();
       expect(handler.getTools()).toHaveLength(2);
@@ -235,6 +259,10 @@ describe("Domain Tools Structure", () => {
       { name: "halopsa_invoices_list", description: "List invoices" },
       { name: "halopsa_invoices_get", description: "Get invoice" },
     ]);
+    mockHandlers.categories.getTools.mockReturnValue([
+      { name: "halopsa_categories_list", description: "List categories" },
+      { name: "halopsa_categories_get", description: "Get category" },
+    ]);
   });
 
   it("tickets domain should expose ticket-specific tools", async () => {
@@ -280,5 +308,14 @@ describe("Domain Tools Structure", () => {
     const toolNames = tools.map((t) => t.name);
     expect(toolNames).toContain("halopsa_invoices_list");
     expect(toolNames).toContain("halopsa_invoices_get");
+  });
+
+  it("categories domain should expose category-specific tools", async () => {
+    const handler = await getDomainHandler("categories");
+    const tools = handler.getTools();
+
+    const toolNames = tools.map((t) => t.name);
+    expect(toolNames).toContain("halopsa_categories_list");
+    expect(toolNames).toContain("halopsa_categories_get");
   });
 });

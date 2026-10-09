@@ -128,7 +128,16 @@ describe("Tickets Domain Handler", () => {
       expect(listTool?.inputSchema.properties).toHaveProperty("status_id");
       expect(listTool?.inputSchema.properties).toHaveProperty("open_only");
       expect(listTool?.inputSchema.properties).toHaveProperty("limit");
+      expect(listTool?.inputSchema.properties).toHaveProperty("page_no");
+      expect(listTool?.inputSchema.properties).toHaveProperty("dateoccurred_start");
+      expect(listTool?.inputSchema.properties).toHaveProperty("dateoccurred_end");
       expect(listTool?.inputSchema.properties).toHaveProperty("search");
+      expect(listTool?.inputSchema.properties).toHaveProperty("category_1");
+      expect(listTool?.inputSchema.properties).not.toHaveProperty("category_2");
+      expect(listTool?.inputSchema.properties).not.toHaveProperty("category_3");
+      expect(listTool?.inputSchema.properties).not.toHaveProperty("category_4");
+      expect(listTool?.description).toMatch(/category_2, category_3, and category_4 are not list filters/);
+      expect(listTool?.description).toMatch(/record_count is the total/i);
     });
 
     it("halopsa_tickets_get should require ticket_id", () => {
@@ -147,6 +156,30 @@ describe("Tickets Domain Handler", () => {
       expect(createTool?.inputSchema.required).toContain("summary");
       expect(createTool?.inputSchema.required).toContain("client_id");
       expect(createTool?.inputSchema.required).toContain("tickettype_id");
+      expect(createTool?.inputSchema.required).not.toContain("category_1");
+      for (const level of [1, 2, 3, 4]) {
+        const field = createTool?.inputSchema.properties?.[`category_${level}`] as
+          | { type?: string; description?: string }
+          | undefined;
+        expect(field?.type).toBe("string");
+        expect(field?.description).toMatch(/halopsa_categories_list/);
+      }
+    });
+
+    it("halopsa_tickets_update should accept optional category values", () => {
+      const tools = ticketsHandler.getTools();
+      const updateTool = tools.find((t) => t.name === "halopsa_tickets_update");
+
+      expect(updateTool).toBeDefined();
+      expect(updateTool?.inputSchema.required).toEqual(["ticket_id"]);
+      for (const level of [1, 2, 3, 4]) {
+        const field = updateTool?.inputSchema.properties?.[`category_${level}`] as
+          | { type?: string; description?: string }
+          | undefined;
+        expect(field?.type).toBe("string");
+        expect(field?.description).toMatch(/Halo category value/);
+        expect(field?.description).toMatch(/halopsa_categories_list/);
+      }
     });
   });
 
@@ -177,8 +210,104 @@ describe("Tickets Domain Handler", () => {
           agent_id: undefined,
           open_only: true,
           closed_only: undefined,
+          dateoccurred_start: undefined,
+          dateoccurred_end: undefined,
+          search: undefined,
+          category_1: undefined,
           pageSize: 10,
+          pageNo: 1,
+          count: true,
         });
+      });
+
+      // HaloPSA ignores page_size on a request that omits page_no and returns
+      // its own first page of 50. page_no=2 then starts at offset limit,
+      // so the records between that short page and the offset never appear.
+      it("sends page 1 with the requested page size when page_no is omitted", async () => {
+        await ticketsHandler.handleCall("halopsa_tickets_list", {
+          client_id: 467,
+          limit: 100,
+        });
+
+        expect(mockTicketsList).toHaveBeenCalledWith(
+          expect.objectContaining({
+            client_id: 467,
+            pageSize: 100,
+            pageNo: 1,
+            count: true,
+          })
+        );
+      });
+
+      it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+        "rejects page_no %s without calling Halo",
+        async (pageNo) => {
+          const result = await ticketsHandler.handleCall("halopsa_tickets_list", {
+            client_id: 467,
+            limit: 100,
+            page_no: pageNo,
+          });
+
+          expect(result.isError).toBe(true);
+          expect(result.content[0].text).toMatch(/page_no must be an integer/);
+          expect(mockTicketsList).not.toHaveBeenCalled();
+        }
+      );
+
+      it("keeps an explicit later page on the same page size", async () => {
+        await ticketsHandler.handleCall("halopsa_tickets_list", {
+          client_id: 467,
+          limit: 100,
+          page_no: 2,
+        });
+
+        expect(mockTicketsList).toHaveBeenCalledWith(
+          expect.objectContaining({
+            client_id: 467,
+            pageSize: 100,
+            pageNo: 2,
+            count: true,
+          })
+        );
+      });
+
+      // dateoccurred_start/end are not Halo query names. The client
+      // translates them; this tool must still forward the window rather
+      // than drop it.
+      it("forwards the date-occurred window", async () => {
+        await ticketsHandler.handleCall("halopsa_tickets_list", {
+          dateoccurred_start: "2025-08-01T00:00:00Z",
+          dateoccurred_end: "2026-05-01T00:00:00Z",
+        });
+
+        expect(mockTicketsList).toHaveBeenCalledWith(
+          expect.objectContaining({
+            dateoccurred_start: "2025-08-01T00:00:00Z",
+            dateoccurred_end: "2026-05-01T00:00:00Z",
+            pageNo: 1,
+            count: true,
+          })
+        );
+      });
+
+      // record_count is the total number of matches. It must not be replaced
+      // with the length of the page that came back.
+      it("reports record_count as the total match count, distinct from the page length", async () => {
+        mockTicketsList.mockResolvedValueOnce({
+          record_count: 385,
+          tickets: Array.from({ length: 100 }, (_, i) => ({ id: i + 1 })),
+        });
+
+        const result = await ticketsHandler.handleCall("halopsa_tickets_list", {
+          client_id: 467,
+          limit: 100,
+        });
+
+        const data = JSON.parse(result.content[0].text);
+        expect(data.record_count).toBe(385);
+        expect(data.tickets).toHaveLength(100);
+        expect(data.page_no).toBe(1);
+        expect(data.page_size).toBe(100);
       });
 
       // Regression: search was accepted by HaloPSA's API but never exposed
@@ -193,6 +322,41 @@ describe("Tickets Domain Handler", () => {
           expect.objectContaining({ search: "printer offline" })
         );
       });
+
+      // TicketListParams only filters on category_1. category_2–4 are
+      // assignment fields, not list filters, and must not be silently dropped.
+      it("forwards category_1 as a list filter", async () => {
+        await ticketsHandler.handleCall("halopsa_tickets_list", {
+          category_1: "Hardware",
+        });
+
+        expect(mockTicketsList).toHaveBeenCalledWith(
+          expect.objectContaining({ category_1: "Hardware" })
+        );
+      });
+
+      it("rejects a non-string category filter before calling Halo", async () => {
+        const result = await ticketsHandler.handleCall("halopsa_tickets_list", {
+          category_1: 123,
+        });
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toMatch(/category_1/);
+        expect(mockTicketsList).not.toHaveBeenCalled();
+      });
+
+      it.each(["category_2", "category_3", "category_4"] as const)(
+        "rejects %s on list before calling Halo",
+        async (field) => {
+          const result = await ticketsHandler.handleCall("halopsa_tickets_list", {
+            category_1: "Hardware",
+            [field]: "Ignored",
+          });
+          expect(result.isError).toBe(true);
+          expect(result.content[0].text).toContain(field);
+          expect(result.content[0].text).toMatch(/not a list filter/);
+          expect(mockTicketsList).not.toHaveBeenCalled();
+        }
+      );
     });
 
     describe("halopsa_tickets_get", () => {
@@ -254,8 +418,48 @@ describe("Tickets Domain Handler", () => {
           priority_id: 3,
           agent_id: 10,
           site_id: 2,
+          category_1: undefined,
+          category_2: undefined,
+          category_3: undefined,
+          category_4: undefined,
         });
       });
+
+      it("forwards category_1–category_4 to the client", async () => {
+        await ticketsHandler.handleCall("halopsa_tickets_create", {
+          summary: "New ticket",
+          client_id: 5,
+          tickettype_id: 1,
+          category_1: "Hardware",
+          category_2: "Laptop",
+          category_3: "Screen",
+          category_4: "Cracked",
+        });
+
+        expect(mockTicketsCreate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            category_1: "Hardware",
+            category_2: "Laptop",
+            category_3: "Screen",
+            category_4: "Cracked",
+          })
+        );
+      });
+
+      it.each(["category_1", "category_2", "category_3", "category_4"])(
+        "rejects non-string %s before creating a ticket",
+        async (field) => {
+          const result = await ticketsHandler.handleCall("halopsa_tickets_create", {
+            summary: "New ticket",
+            client_id: 5,
+            tickettype_id: 1,
+            [field]: 123,
+          });
+          expect(result.isError).toBe(true);
+          expect(result.content[0].text).toContain(field);
+          expect(mockTicketsCreate).not.toHaveBeenCalled();
+        }
+      );
     });
 
     describe("halopsa_tickets_update", () => {
@@ -285,8 +489,43 @@ describe("Tickets Domain Handler", () => {
           status_id: 2,
           priority_id: 1,
           agent_id: undefined,
+          category_1: undefined,
+          category_2: undefined,
+          category_3: undefined,
+          category_4: undefined,
         });
       });
+
+      it("forwards category_1–category_4 to the client", async () => {
+        await ticketsHandler.handleCall("halopsa_tickets_update", {
+          ticket_id: 1,
+          category_1: "Software",
+          category_2: "Email",
+        });
+
+        expect(mockTicketsUpdate).toHaveBeenCalledWith(
+          1,
+          expect.objectContaining({
+            category_1: "Software",
+            category_2: "Email",
+            category_3: undefined,
+            category_4: undefined,
+          })
+        );
+      });
+
+      it.each(["category_1", "category_2", "category_3", "category_4"])(
+        "rejects non-string %s before updating a ticket",
+        async (field) => {
+          const result = await ticketsHandler.handleCall("halopsa_tickets_update", {
+            ticket_id: 1,
+            [field]: false,
+          });
+          expect(result.isError).toBe(true);
+          expect(result.content[0].text).toContain(field);
+          expect(mockTicketsUpdate).not.toHaveBeenCalled();
+        }
+      );
     });
 
     describe("halopsa_tickets_add_action", () => {
@@ -318,6 +557,37 @@ describe("Tickets Domain Handler", () => {
           outcome: "Resolved",
           timetaken: 30,
           hiddenfromuser: true,
+        });
+      });
+
+      it("should default outcome to 'Private Note' for a hidden action with no outcome supplied", async () => {
+        await ticketsHandler.handleCall("halopsa_tickets_add_action", {
+          ticket_id: 1,
+          note: "Internal note",
+          hidden_from_user: true,
+        });
+
+        expect(mockActionsCreate).toHaveBeenCalledWith({
+          ticket_id: 1,
+          note: "Internal note",
+          outcome: "Private Note",
+          timetaken: undefined,
+          hiddenfromuser: true,
+        });
+      });
+
+      it("should leave outcome undefined for a visible action with no outcome supplied", async () => {
+        await ticketsHandler.handleCall("halopsa_tickets_add_action", {
+          ticket_id: 1,
+          note: "Visible note",
+        });
+
+        expect(mockActionsCreate).toHaveBeenCalledWith({
+          ticket_id: 1,
+          note: "Visible note",
+          outcome: undefined,
+          timetaken: undefined,
+          hiddenfromuser: undefined,
         });
       });
     });

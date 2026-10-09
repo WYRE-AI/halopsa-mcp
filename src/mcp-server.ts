@@ -28,13 +28,15 @@ import {
 } from "./utils/client.js";
 import { registerPromptHandlers } from "./prompts.js";
 import { registerResourceHandlers } from "./resources.js";
+import { HaloPsaValidationError } from "@wyre-ai/node-halopsa";
+import { mcpServerVersion } from "./server-version.js";
 
 export type { HaloPsaCredentials };
 
 /**
  * Available domains for navigation
  */
-type Domain = "tickets" | "clients" | "assets" | "agents" | "invoices";
+type Domain = DomainName;
 
 /**
  * Domain metadata for navigation
@@ -45,6 +47,7 @@ const domainDescriptions: Record<Domain, string> = {
   assets: "Asset management - list and get hardware/software assets, configurations",
   agents: "Agent management - list and get support staff and technician information",
   invoices: "Invoice management - list and get billing and invoice information",
+  categories: "Ticket categories - list and get Halo category values for category_1–category_4",
 };
 
 /**
@@ -70,7 +73,8 @@ const navigateTool: Tool = {
 - clients: ${domainDescriptions.clients}
 - assets: ${domainDescriptions.assets}
 - agents: ${domainDescriptions.agents}
-- invoices: ${domainDescriptions.invoices}`,
+- invoices: ${domainDescriptions.invoices}
+- categories: ${domainDescriptions.categories}`,
       },
     },
     required: ["domain"],
@@ -248,7 +252,7 @@ export function createMcpServer(): Server {
   const server = new Server(
     {
       name: "halopsa-mcp",
-      version: "1.0.0",
+      version: mcpServerVersion(),
     },
     {
       capabilities: {
@@ -336,6 +340,10 @@ export function createMcpServer(): Server {
         const handler = await getDomainHandler("invoices");
         return await handler.handleCall(name, toolArgs);
       }
+      if (name.startsWith("halopsa_categories_")) {
+        const handler = await getDomainHandler("categories");
+        return await handler.handleCall(name, toolArgs);
+      }
 
       // Unknown tool
       return {
@@ -348,6 +356,15 @@ export function createMcpServer(): Server {
         isError: true,
       };
     } catch (error) {
+      if (error instanceof HaloPsaValidationError && error.errors.length > 0) {
+        const fields = error.errors
+          .map((e) => `${e.field}: ${e.message}`)
+          .join("; ");
+        return {
+          content: [{ type: "text", text: `Error: Validation failed — ${fields}` }],
+          isError: true,
+        };
+      }
       return {
         content: [{ type: "text", text: formatToolError(error) }],
         isError: true,

@@ -6,6 +6,7 @@
  * transport the Worker uses in production.
  */
 
+import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import worker, { type Env } from "../worker.js";
 
@@ -63,9 +64,14 @@ describe("Cloudflare Worker entrypoint", () => {
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      result?: { serverInfo?: { name?: string } };
+      result?: { serverInfo?: { name?: string; version?: string } };
     };
     expect(body.result?.serverInfo?.name).toBe("halopsa-mcp");
+    const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as {
+      version: string;
+    };
+    expect(body.result?.serverInfo?.version).toBe(pkg.version);
+    expect(body.result?.serverInfo?.version).not.toBe("1.0.0");
   });
 
   it("lists all tools without credentials", async () => {
