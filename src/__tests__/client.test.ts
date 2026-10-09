@@ -438,10 +438,45 @@ describe("HaloPSA Client Utilities", () => {
       });
 
       const text = formatToolError(error);
-      expect(text).toContain("Error: Forbidden");
-      expect(text).toContain("HTTP 403");
+      expect(text).toContain("Error: Forbidden (HTTP 403)");
       expect(text).toContain("missing permission");
       expect(text).not.toMatch(/^AUTH_FAILED:/);
+    });
+
+    it("scrubs credentials but keeps the Halo diagnostic snippet", () => {
+      const jwt =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
+      const html = [
+        "<html><body>",
+        "Sorry, something went wrong.",
+        "client_secret=super-secret-value",
+        `Authorization: Bearer ${jwt}`,
+        "https://user:pw@wyretechnology.halopsa.com/auth/token?client_id=cid-should-not-leak&client_secret=another-secret",
+        "https://wyretechnology.halopsa.com/auth/token",
+        "</body></html>",
+      ].join(" ");
+      const error = Object.assign(
+        new Error(
+          "Failed to acquire token: 500 client_id=cid-should-not-leak client_secret=super-secret-value"
+        ),
+        {
+          name: "HaloPsaAuthenticationError",
+          statusCode: 500,
+          response: html,
+        }
+      );
+
+      const text = formatToolError(error);
+      expect(text).toContain("Sorry, something went wrong");
+      expect(text).toContain("Failed to acquire token: 500");
+      expect(text).toContain("https://wyretechnology.halopsa.com/auth/token");
+      expect(text).toContain("HTTP 500");
+      expect(text).not.toContain("super-secret-value");
+      expect(text).not.toContain("another-secret");
+      expect(text).not.toContain("cid-should-not-leak");
+      expect(text).not.toContain("user:pw");
+      expect(text).not.toContain(jwt);
+      expect(text).not.toContain("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9");
     });
   });
 
@@ -516,22 +551,23 @@ describe("HaloPSA Client Utilities", () => {
         healthy: false,
         target: "wyretechnology",
       });
+      expect(probe).toMatchObject({ unknown: true });
       expect(probe.configured && !probe.healthy ? probe.error : "").toMatch(
         /invalid base URL/
       );
-      expect(probe.configured && !probe.healthy ? probe.error : "").not.toMatch(
-        /Token mint: OK/
-      );
     });
 
-    it("keeps token mint OK when the API call fails after authentication", async () => {
+    it("keeps token mint OK when a post-token API call fails", async () => {
       process.env.HALOPSA_CLIENT_ID = "test-id";
       process.env.HALOPSA_CLIENT_SECRET = "test-secret";
       process.env.HALOPSA_TENANT = "wyretechnology";
 
       const client = await getClient();
       vi.spyOn(client.clients, "list").mockRejectedValue(
-        Object.assign(new Error("Forbidden"), { statusCode: 403 })
+        Object.assign(new Error("Access forbidden - insufficient permissions"), {
+          name: "HaloPsaForbiddenError",
+          statusCode: 403,
+        })
       );
 
       const probe = await probeHaloAuth();
@@ -542,6 +578,29 @@ describe("HaloPSA Client Utilities", () => {
       });
       expect(probe.configured && probe.healthy ? probe.warning : "").toContain(
         "HTTP 403"
+      );
+      expect(probe).not.toMatchObject({ unknown: true });
+    });
+
+    it("does not report token mint OK for an unclassified pre-token error", async () => {
+      process.env.HALOPSA_CLIENT_ID = "test-id";
+      process.env.HALOPSA_CLIENT_SECRET = "test-secret";
+      process.env.HALOPSA_TENANT = "wyretechnology";
+
+      const client = await getClient();
+      vi.spyOn(client.clients, "list").mockRejectedValue(
+        new Error("socket hang up")
+      );
+
+      const probe = await probeHaloAuth();
+      expect(probe).toMatchObject({
+        configured: true,
+        healthy: false,
+        unknown: true,
+        target: "wyretechnology",
+      });
+      expect(probe.configured && !probe.healthy ? probe.error : "").toContain(
+        "socket hang up"
       );
     });
   });

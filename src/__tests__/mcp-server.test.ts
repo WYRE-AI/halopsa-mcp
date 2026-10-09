@@ -97,6 +97,22 @@ describe("buildStatusToolResult", () => {
     expect(result.content[0].text).toMatch(/AUTH_FAILED/);
     expect(result.content[0].text).not.toMatch(/credentials OK/i);
     expect(result.content[0].text).not.toMatch(/Credentials: Configured/);
+    expect(result.content[0].text).not.toMatch(/Token mint: UNKNOWN/);
+  });
+
+  it("does not report token mint OK when the probe is unclassified", () => {
+    const result = buildStatusToolResult({
+      configured: true,
+      healthy: false,
+      unknown: true,
+      target: "wyretechnology",
+      error: "Error: socket hang up",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/Token mint: UNKNOWN/);
+    expect(result.content[0].text).toMatch(/socket hang up/);
+    expect(result.content[0].text).not.toMatch(/Token mint: OK/);
+    expect(result.content[0].text).not.toMatch(/Token mint: FAILED/);
   });
 
   it("reports token mint OK only after a successful probe", () => {

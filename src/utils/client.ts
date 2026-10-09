@@ -33,6 +33,11 @@ export type AuthProbeResult =
       target: string;
       error?: string;
       warning?: string;
+      /**
+       * Credentials are present, but this error was not a recognized token-mint
+       * failure and not a post-token API error. Token mint is not OK.
+       */
+      unknown?: boolean;
     };
 
 // An unresolved MCPB/DXT manifest placeholder, e.g. "${user_config.halopsa_base_url}".
@@ -55,6 +60,25 @@ const HALO_HOSTED_DOMAINS = [
 
 const TOKEN_MINT_FAILED = /failed to acquire token/i;
 const MAX_UPSTREAM_BODY_CHARS = 400;
+const REDACTED = "REDACTED";
+
+/**
+ * SDK errors thrown only after `AuthManager.getToken()` has resolved.
+ * `HaloPsaAuthenticationError` is intentionally absent: that is a mint failure.
+ * `HaloPsaConfigurationError` is absent too: it is raised before any token request.
+ */
+const POST_TOKEN_API_ERROR_NAMES = new Set([
+  "HaloPsaError",
+  "HaloPsaForbiddenError",
+  "HaloPsaNotFoundError",
+  "HaloPsaValidationError",
+  "HaloPsaBadRequestError",
+  "HaloPsaRateLimitError",
+  "HaloPsaServerError",
+]);
+
+const SENSITIVE_QUERY_KEY =
+  /^(?:client[_-]?secret|client[_-]?id|api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|password|passwd|token|code)$/i;
 
 /**
  * Normalise a single credential value read from an env var or gateway header.
@@ -263,6 +287,11 @@ export function isTokenMintFailure(error: unknown): boolean {
   return TOKEN_MINT_FAILED.test(error.message);
 }
 
+/** True when the SDK threw this only after a token had already been minted. */
+function isPostTokenApiError(error: unknown): boolean {
+  return error instanceof Error && POST_TOKEN_API_ERROR_NAMES.has(error.name);
+}
+
 /** Read a positive numeric HTTP status code from an SDK error-like value. */
 function errorStatusCode(error: unknown): number | undefined {
   const status = (error as { statusCode?: unknown } | null)?.statusCode;
@@ -309,10 +338,72 @@ export function summarizeErrorBody(raw: unknown): string | undefined {
     text = trimmed;
   }
 
+  text = redactSensitive(text);
+
   if (text.length > MAX_UPSTREAM_BODY_CHARS) {
     return `${text.slice(0, MAX_UPSTREAM_BODY_CHARS)}…`;
   }
   return text;
+}
+
+/**
+ * Remove credentials from operator-facing error text.
+ *
+ * The Halo diagnostic sentence stays. Values that are secrets, tokens,
+ * client ids, auth headers, or credentialed request URLs are replaced.
+ * A bare `token: 500` (the SDK's status phrase) is left alone.
+ */
+export function redactSensitive(text: string): string {
+  let out = text;
+  out = out.replace(
+    /\b(authorization|x-api-key|api-key|x-auth-token)\s*[:=]\s*(?:bearer|basic|token)?\s*\S+/gi,
+    `$1: ${REDACTED}`
+  );
+  out = out.replace(/\bBearer\s+[A-Za-z0-9\-._~+/]+=*/gi, `Bearer ${REDACTED}`);
+  out = out.replace(
+    /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g,
+    REDACTED
+  );
+  out = out.replace(
+    /((?:client[_-]?secret|client[_-]?id|api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|password|passwd|token))(\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s&"',}]+)/gi,
+    (match, key: string, sep: string, value: string) => {
+      if (/^token$/i.test(key) && !looksLikeCredential(value)) return match;
+      return `${key}${sep}${REDACTED}`;
+    }
+  );
+  out = out.replace(/\bhttps?:\/\/[^\s"'<>]+/gi, redactCredentialUrl);
+  return out;
+}
+
+/** True when a `token=` value is a credential rather than an HTTP status. */
+function looksLikeCredential(value: string): boolean {
+  const raw = value.replace(/^['"]|['"]$/g, "");
+  if (/^\d{1,3}$/.test(raw)) return false;
+  return raw.length >= 8;
+}
+
+/** Drop userinfo and sensitive query values. Leave credential-free URLs. */
+function redactCredentialUrl(raw: string): string {
+  const trimmed = raw.replace(/[),.;]+$/, "");
+  const suffix = raw.slice(trimmed.length);
+  try {
+    const url = new URL(trimmed);
+    let changed = false;
+    if (url.username || url.password) {
+      url.username = REDACTED;
+      url.password = REDACTED;
+      changed = true;
+    }
+    for (const key of [...url.searchParams.keys()]) {
+      if (SENSITIVE_QUERY_KEY.test(key)) {
+        url.searchParams.set(key, REDACTED);
+        changed = true;
+      }
+    }
+    return changed ? `${url.toString()}${suffix}` : raw;
+  } catch {
+    return raw;
+  }
 }
 
 /**
@@ -324,7 +415,9 @@ export function summarizeErrorBody(raw: unknown): string | undefined {
  * wrong" page on `.response`.
  */
 export function formatToolError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = redactSensitive(
+    error instanceof Error ? error.message : String(error)
+  );
   const body = summarizeErrorBody(errorResponse(error));
   const statusCode = errorStatusCode(error);
 
@@ -345,10 +438,10 @@ export function formatToolError(error: unknown): string {
     return parts.join("\n");
   }
 
-  const parts = [`Error: ${message}`];
-  if (statusCode) {
-    parts.push(`HTTP ${statusCode}`);
-  }
+  const headline = statusCode
+    ? `Error: ${message} (HTTP ${statusCode})`
+    : `Error: ${message}`;
+  const parts = [headline];
   if (body && !message.includes(body)) {
     parts.push(body);
   }
@@ -372,37 +465,39 @@ export async function probeHaloAuth(): Promise<AuthProbeResult> {
   try {
     client = await getClient();
   } catch (error) {
-    // Construction never reaches /auth/token. Do not report mint OK.
-    return failedProbe(target, error);
+    // Construction never reaches /auth/token.
+    return probeFromError(target, error);
   }
 
   try {
     await client.clients.list({ pageSize: 1, pageNo: 1 });
     return { configured: true, healthy: true, target };
   } catch (error) {
-    if (isTokenMintFailure(error)) {
-      return failedProbe(target, error);
-    }
-    // @wyre-ai/node-halopsa mints inside the first API call and throws
-    // HaloPsaAuthenticationError for every mint failure, including network
-    // errors. A different error from clients.list means getToken() already
-    // resolved, so the mint itself succeeded and the API call did not.
-    return {
-      configured: true,
-      healthy: true,
-      target,
-      warning: formatToolError(error),
-    };
+    return probeFromError(target, error);
   }
 }
 
-/** Credentials are present, but token mint did not succeed. */
-function failedProbe(target: string, error: unknown): AuthProbeResult {
+/**
+ * Classify a probe failure.
+ *
+ * Recognized mint failures are unhealthy. Named SDK API errors are thrown
+ * only after `getToken()` resolves, so those keep mint OK and carry a warning.
+ * Anything else has not proven a minted token and must not be reported OK.
+ */
+function probeFromError(target: string, error: unknown): AuthProbeResult {
+  const text = formatToolError(error);
+  if (isTokenMintFailure(error)) {
+    return { configured: true, healthy: false, target, error: text };
+  }
+  if (isPostTokenApiError(error)) {
+    return { configured: true, healthy: true, target, warning: text };
+  }
   return {
     configured: true,
     healthy: false,
+    unknown: true,
     target,
-    error: formatToolError(error),
+    error: text,
   };
 }
 

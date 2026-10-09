@@ -28,11 +28,12 @@
      "Configured".
   3. Tool errors from a failed mint are typed as `AUTH_FAILED` and include
      the HTTP status plus a stripped upstream body, not a bare 500.
-     Other vendor failures include `HTTP <status>` as well. `tenantId` is
-     only a hosted subdomain or a bare tenant label — custom-domain URLs
-     and hosted root domains are not sent. A failure while constructing
-     the client, before any token request, is mint failed rather than
-     `Token mint: OK`.
+     Other vendor failures include `HTTP <status>` on the same line.
+     Error text stays HTML-stripped and length-capped, and credentials,
+     tokens, client ids, auth headers, and credentialed URLs are scrubbed.
+     `tenantId` is only a hosted subdomain or a bare tenant label.
+     An error that is not a recognized mint failure and not a post-token
+     API error is `Token mint: UNKNOWN` (`isError`), not OK.
 - **`halopsa_tickets_add_action` silently failed on a hidden action with no
   `outcome` supplied.** Halo's API rejects any posted action lacking an
   `outcome` field, even when `hidden_from_user` is set, and the rejection

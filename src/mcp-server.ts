@@ -121,11 +121,17 @@ export function buildStatusToolResult(probe: AuthProbeResult): {
   }
 
   if (!probe.healthy) {
+    const mint = probe.unknown ? "UNKNOWN" : "FAILED";
+    const detail =
+      probe.error ??
+      (probe.unknown
+        ? "Token mint could not be confirmed."
+        : "AUTH_FAILED: token mint failed");
     return {
       content: [
         {
           type: "text",
-          text: `HaloPSA MCP Server Status\n\nCredentials: present (tenant: ${probe.target})\nToken mint: FAILED\n${probe.error ?? "AUTH_FAILED: token mint failed"}\n\n${domains}\n\n${STATUS_FOOTER}`,
+          text: `HaloPSA MCP Server Status\n\nCredentials: present (tenant: ${probe.target})\nToken mint: ${mint}\n${detail}\n\n${domains}\n\n${STATUS_FOOTER}`,
         },
       ],
       isError: true,
