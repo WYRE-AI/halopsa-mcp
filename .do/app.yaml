@@ -34,6 +34,12 @@ spec:
         - key: HALOPSA_TENANT
           scope: RUN_TIME
           type: SECRET
+        # X-Gateway-S2S shared secret. No value is committed: set the encrypted
+        # secret in the App Platform UI before deploy. HTTP startup exits until
+        # this is a real (non-placeholder) value. Do not set MCP_ALLOW_INSECURE_DEV.
+        - key: CONDUIT_S2S_SECRET
+          scope: RUN_TIME
+          type: SECRET
         - key: MCP_TRANSPORT
           scope: RUN_TIME
           value: http

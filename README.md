@@ -20,6 +20,9 @@ A Model Context Protocol (MCP) server for interacting with HaloPSA, featuring a 
 >      (Workers → Settings → Build → Variables and Secrets).
 >    - **DigitalOcean App Platform** → set an encrypted env var named **`GITHUB_TOKEN`**
 >      with scope **Build Time** to your PAT (the `.do/app.yaml` already declares it).
+>      Also set **`CONDUIT_S2S_SECRET`** (scope **Run Time**, type secret). The spec
+>      declares the key with no value in git. Use `openssl rand -hex 32`. HTTP will
+>      not start without a real secret. Do not set `MCP_ALLOW_INSECURE_DEV`.
 
 [![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/WYRE-AI/halopsa-mcp/tree/main)
 
