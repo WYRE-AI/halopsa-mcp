@@ -75,14 +75,28 @@ reads the token from `NODE_AUTH_TOKEN`, so no further config is needed.
 
 ## Configuration
 
-Set the following environment variables:
+Copy [`.env.example`](.env.example) and set the variables below.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `HALOPSA_CLIENT_ID` | Yes | OAuth 2.0 Client ID |
-| `HALOPSA_CLIENT_SECRET` | Yes | OAuth 2.0 Client Secret |
-| `HALOPSA_TENANT` | One of | Tenant name (e.g., `yourcompany`) |
-| `HALOPSA_BASE_URL` | these | Explicit base URL (e.g., `https://yourcompany.halopsa.com`) |
+| `HALOPSA_CLIENT_ID` | For stdio and `AUTH_MODE=env` | OAuth 2.0 Client ID |
+| `HALOPSA_CLIENT_SECRET` | For stdio and `AUTH_MODE=env` | OAuth 2.0 Client Secret |
+| `HALOPSA_TENANT` | One of tenant or base URL | Tenant name (e.g., `yourcompany`) |
+| `HALOPSA_BASE_URL` | One of tenant or base URL | Explicit base URL (e.g., `https://yourcompany.halopsa.com`) |
+| `MCP_TRANSPORT` | No | `stdio` (default) or `http` |
+| `AUTH_MODE` | No | `gateway` (Docker image and Compose default) or `env`. Gateway mode requires `X-Halo-Client-ID`, `X-Halo-Client-Secret`, and `X-Halo-Tenant` or `X-Halo-Base-URL` on each `/mcp` request and never falls back to `HALOPSA_*`. `env` uses those variables only after S2S auth succeeds. |
+| `CONDUIT_S2S_SECRET` | Yes for HTTP | Service-to-service secret. The HTTP server logs an error and exits non-zero when this is empty or a known placeholder (`changeme`, `your-s2s-secret`, `placeholder`, `secret`, `replace-me`, `replace-with-a-real-secret`, and the other example values). Compose will not start without it. Never commit a real value. |
+| `MCP_ALLOW_INSECURE_DEV` | No | Set to exactly `1` only for local development to start HTTP without `CONDUIT_S2S_SECRET`. The process logs a warning and does not enforce `X-Gateway-S2S`. The listener is forced to `127.0.0.1`. A non-loopback `MCP_HTTP_HOST` (including `0.0.0.0`) is overridden and that override is logged. A placeholder secret is still rejected. |
+| `MCP_HTTP_HOST` | No | Bind address when a real `CONDUIT_S2S_SECRET` is set. Unset keeps `0.0.0.0`. The container image and Compose set `0.0.0.0` inside the container. |
+| `MCP_HTTP_PORT` | No | HTTP port. Defaults to `8080`. |
+
+`/health` stays unauthenticated and does not read credentials. The stdio transport does not use `CONDUIT_S2S_SECRET`.
+
+### HTTP authentication
+
+With `MCP_TRANSPORT=http` and `CONDUIT_S2S_SECRET` set, every `/mcp` request must include `X-Gateway-S2S`. The value is `t=<unix seconds>,v1=<hex hmac-sha256>`, where the HMAC-SHA256 is computed over the ASCII string `t=<unix seconds>` using `CONDUIT_S2S_SECRET` as the key. A missing or invalid header returns 401. The secret is never written to logs.
+
+In `AUTH_MODE=gateway`, `/mcp` also requires `X-Halo-Client-ID` and `X-Halo-Client-Secret`, plus `X-Halo-Tenant` or `X-Halo-Base-URL`. Those headers are the only credential source for that request. Missing credential headers return 401 and do not fall back to `HALOPSA_*`.
 
 ## Usage
 
@@ -120,9 +134,39 @@ Add to your Claude Desktop `claude_desktop_config.json`:
 
 ### Docker
 
+The image listens on `0.0.0.0` inside the container (`MCP_HTTP_HOST`) and defaults to `AUTH_MODE=gateway`. Publish the port on loopback and pass the S2S secret. In gateway mode, HaloPSA credentials arrive on each request as headers; they are not read from the environment.
+
 ```bash
 docker build -t halopsa-mcp .
-docker run -e HALOPSA_CLIENT_ID=xxx -e HALOPSA_CLIENT_SECRET=xxx -e HALOPSA_TENANT=yourcompany halopsa-mcp
+docker run \
+  -e CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" \
+  -p 127.0.0.1:8080:8080 \
+  halopsa-mcp
+```
+
+Compose refuses to start when `CONDUIT_S2S_SECRET` is unset, sets `AUTH_MODE=gateway`, does not inject `HALOPSA_*` credentials, and publishes `127.0.0.1:8080:8080`:
+
+```bash
+CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" docker compose up
+```
+
+Single-tenant HTTP (`AUTH_MODE=env`) still requires the S2S secret, then uses `HALOPSA_CLIENT_ID`, `HALOPSA_CLIENT_SECRET`, and `HALOPSA_TENANT`:
+
+```bash
+docker run \
+  -e CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" \
+  -e AUTH_MODE=env \
+  -e HALOPSA_CLIENT_ID=your-client-id \
+  -e HALOPSA_CLIENT_SECRET=your-client-secret \
+  -e HALOPSA_TENANT=yourcompany \
+  -p 127.0.0.1:8080:8080 \
+  halopsa-mcp
+```
+
+Local HTTP without a secret is development-only. It binds `127.0.0.1` and logs a warning. A non-loopback `MCP_HTTP_HOST` is overridden to `127.0.0.1` and that override is logged:
+
+```bash
+MCP_TRANSPORT=http MCP_ALLOW_INSECURE_DEV=1 npm start
 ```
 
 ## Available Domains
