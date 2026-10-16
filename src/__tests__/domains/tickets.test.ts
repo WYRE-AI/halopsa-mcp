@@ -382,6 +382,41 @@ describe("Tickets Domain Handler", () => {
         expect(data.actions).toBeDefined();
         expect(data.actions).toHaveLength(2);
       });
+
+      it("requests private actions and flags them by default (WYREAI-502)", async () => {
+        mockActionsList.mockResolvedValueOnce({
+          record_count: 2,
+          actions: [
+            { id: 1, ticket_id: 1, note: "public", hiddenfromuser: false },
+            { id: 2, ticket_id: 1, note: "internal", hiddenfromuser: true },
+          ],
+        });
+        const result = await ticketsHandler.handleCall("halopsa_tickets_get", {
+          ticket_id: 1,
+          include_actions: true,
+        });
+        expect(mockActionsList).toHaveBeenLastCalledWith({ ticket_id: 1, excludeprivate: false });
+        const data = JSON.parse(result.content[0].text);
+        expect(data.actions.map((a: { is_private: boolean }) => a.is_private)).toEqual([false, true]);
+      });
+
+      it("excludes private actions when include_private is false", async () => {
+        mockActionsList.mockResolvedValueOnce({
+          record_count: 2,
+          actions: [
+            { id: 1, ticket_id: 1, note: "public" },
+            { id: 2, ticket_id: 1, note: "internal", hiddenfromuser: true },
+          ],
+        });
+        const result = await ticketsHandler.handleCall("halopsa_tickets_get", {
+          ticket_id: 1,
+          include_actions: true,
+          include_private: false,
+        });
+        expect(mockActionsList).toHaveBeenLastCalledWith({ ticket_id: 1, excludeprivate: true });
+        const data = JSON.parse(result.content[0].text);
+        expect(data.actions).toEqual([{ id: 1, ticket_id: 1, note: "public", is_private: false }]);
+      });
     });
 
     describe("halopsa_tickets_create", () => {
