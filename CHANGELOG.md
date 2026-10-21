@@ -12,6 +12,16 @@
   wasn't exposed on this tool, forcing a multi-page sweep for what a single
   search call can answer.
 
+### Security
+
+- **HTTP MCP fails closed without a real S2S secret (CWE-306).** The HTTP
+  transport exits on startup when `CONDUIT_S2S_SECRET` is empty or a known
+  placeholder. `MCP_ALLOW_INSECURE_DEV=1` is the only empty-secret bypass, and
+  it binds `127.0.0.1` only. Gateway mode requires Halo credential headers on
+  each `/mcp` request and does not fall back to `HALOPSA_*`. `.do/app.yaml`
+  and `.do/deploy.template.yaml` declare `CONDUIT_S2S_SECRET` as a run-time
+  secret with no value committed. `/health` stays unauthenticated.
+
 ### Fixed
 
 - **HaloPSA token mint could 500 while `halopsa_status` still said credentials

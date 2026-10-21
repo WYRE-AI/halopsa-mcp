@@ -27,3 +27,7 @@ spec:
     - key: HALOPSA_TENANT
       type: SECRET
       scope: RUN_AND_BUILD_TIME
+    # No value committed. Set the encrypted secret in App Platform before deploy.
+    - key: CONDUIT_S2S_SECRET
+      type: SECRET
+      scope: RUN_TIME
