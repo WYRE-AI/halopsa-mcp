@@ -1,3 +1,4 @@
+import type { StandaloneActionListParams } from "@wyre-ai/node-halopsa";
 /**
  * Tickets domain handler
  *
@@ -108,7 +109,13 @@ function getTools(): Tool[] {
           },
           include_actions: {
             type: "boolean",
-            description: "Include actions/notes",
+            description:
+              "Include actions/notes. Each action carries is_private (true when hidden from the end user, e.g. a Private Note).",
+          },
+          include_private: {
+            type: "boolean",
+            description:
+              "With include_actions, also return private/internal notes (default true). Set false for only end-user-visible actions.",
           },
         },
         required: ["ticket_id"],
@@ -319,10 +326,17 @@ async function handleCall(
 
       let actions;
       if (includeActions) {
-        const actionsResponse = await client.actions.list({
+        const includePrivate = args.include_private !== false;
+        // WYREAI-502: ask Halo explicitly for private actions (excludeprivate
+        // =false) rather than relying on the server default, and flag each
+        // action so callers can tell internal notes from public ones.
+        const listParams: StandaloneActionListParams = {
           ticket_id: ticketId,
-        });
-        actions = actionsResponse.actions;
+          excludeprivate: !includePrivate,
+        };
+        const actionsResponse = await client.actions.list(listParams);
+        actions = (actionsResponse.actions ?? []).map(withPrivacyFlag);
+        if (!includePrivate) actions = actions.filter((a) => !a.is_private);
       }
 
       const payload: Record<string, unknown> = includeActions
@@ -435,3 +449,13 @@ export const ticketsHandler: DomainHandler = {
   getTools,
   handleCall,
 };
+
+/**
+ * Halo marks an internal/private action with `hiddenfromuser: true` (the
+ * "Private Note" action type defaults to it). Expose a plain is_private flag.
+ */
+export function withPrivacyFlag<T extends { hiddenfromuser?: unknown }>(
+  action: T
+): T & { is_private: boolean } {
+  return { ...action, is_private: action?.hiddenfromuser === true };
+}
