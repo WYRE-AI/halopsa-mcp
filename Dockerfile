@@ -25,10 +25,14 @@ EXPOSE 8080
 # comes from MCP_HTTP_PORT so a non-default port is probed too.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider "http://127.0.0.1:${MCP_HTTP_PORT:-8080}/health" || exit 1
+# 0.0.0.0 is the in-container bind. Startup still refuses to listen without
+# a real CONDUIT_S2S_SECRET. MCP_ALLOW_INSECURE_DEV=1 overrides this host and
+# binds 127.0.0.1 only. AUTH_MODE=gateway does not fall back to image env
+# credentials.
 ENV MCP_TRANSPORT=http
 ENV MCP_HTTP_PORT=8080
 ENV MCP_HTTP_HOST=0.0.0.0
-ENV AUTH_MODE=env
+ENV AUTH_MODE=gateway
 # Release builds pass VERSION equal to the image tag / OCI version label.
 # serverInfo.version reads MCP_SERVER_VERSION so it matches that label
 # instead of a hardcoded 1.0.0. Empty when unset; the process then falls
