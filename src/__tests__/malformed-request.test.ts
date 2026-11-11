@@ -6,24 +6,61 @@
  *
  * Raw sockets are used because fetch() refuses to send these requests.
  */
-import { describe, it, expect, beforeAll } from 'vitest';
-import { connect } from 'node:net';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { connect, createServer as createNetServer } from 'node:net';
+import type { Server } from 'node:http';
 
-const TEST_PORT = 47008;
+// src/index.ts starts its listener at import time and keeps the server private,
+// so record whatever it creates in order to close it in afterAll.
+const httpServers = vi.hoisted(() => [] as Server[]);
+vi.mock('node:http', async (importOriginal) => {
+  const http = await importOriginal<typeof import('node:http')>();
+  return {
+    ...http,
+    createServer: ((...args: Parameters<typeof http.createServer>) => {
+      const server = http.createServer(...args);
+      httpServers.push(server);
+      return server;
+    }) as typeof http.createServer,
+  };
+});
+
+let port: number;
+
+/** Ask the OS for a free port by briefly binding port 0. */
+function getFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createNetServer();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address() as { port: number };
+      probe.close(() => resolve(port));
+    });
+  });
+}
 
 beforeAll(async () => {
+  port = await getFreePort();
   process.env.MCP_TRANSPORT = 'http';
-  process.env.MCP_HTTP_PORT = String(TEST_PORT);
+  process.env.MCP_HTTP_PORT = String(port);
   process.env.MCP_HTTP_HOST = '127.0.0.1';
   delete process.env.CONDUIT_S2S_SECRET;
   await import('../index.js');
+  expect(httpServers).toHaveLength(1); // guards the afterAll cleanup below
   await waitForServerReady();
+});
+
+afterAll(async () => {
+  for (const server of httpServers) {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
 
 /** Send raw HTTP bytes, return the status line and body. */
 function rawRequest(payload: string): Promise<{ status: string; body: string }> {
   return new Promise((resolve, reject) => {
-    const socket = connect(TEST_PORT, '127.0.0.1');
+    const socket = connect(port, '127.0.0.1');
     let data = '';
     socket.on('connect', () => socket.write(payload));
     socket.on('data', (chunk) => (data += chunk));
@@ -37,16 +74,19 @@ function rawRequest(payload: string): Promise<{ status: string; body: string }> 
 
 async function waitForServerReady(): Promise<void> {
   const deadline = Date.now() + 5000;
+  let lastError: unknown;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`http://127.0.0.1:${TEST_PORT}/health`);
+      const res = await fetch(`http://127.0.0.1:${port}/health`);
       if (res.ok) return;
-    } catch {
-      // not up yet
+    } catch (err) {
+      lastError = err; // not up yet
     }
     await new Promise((r) => setTimeout(r, 50));
   }
-  throw new Error('halopsa-mcp test HTTP server did not become ready in time');
+  throw new Error('halopsa-mcp test HTTP server did not become ready in time', {
+    cause: lastError,
+  });
 }
 
 const HEALTH = 'GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n';
