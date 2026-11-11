@@ -14,6 +14,12 @@
 
 ### Fixed
 
+- **The HTTP transport no longer exits on a malformed request.** The request
+  target was parsed against the client-supplied `Host` header, and a value
+  that does not parse (or a target such as `//`) threw inside the request
+  listener and terminated the process. The target is now parsed against a
+  fixed base, so `Host` is no longer consulted, and a target that still cannot
+  be parsed gets a `400` JSON response while the server keeps running.
 - **HaloPSA token mint could 500 while `halopsa_status` still said credentials
   were OK (WYREAI-370).** Status only checked that a client id, secret, and
   tenant/base URL were *present* — it never called `/auth/token`. Data tools
