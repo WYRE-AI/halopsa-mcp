@@ -135,7 +135,7 @@ Tools:
 - `halopsa_tickets_get` - Get ticket details
 - `halopsa_tickets_create` - Create a new ticket (optional `category_1`–`category_4`)
 - `halopsa_tickets_update` - Update an existing ticket (optional `category_1`–`category_4`)
-- `halopsa_tickets_add_action` - Add a note/action to a ticket
+- `halopsa_tickets_add_action` - Add a note/action to a ticket. Supply time spent in minutes using `time_minutes` (preferred) or the deprecated `timetaken` alias. The server converts minutes to Halo decimal hours (15 minutes → 0.25 hours); `time_minutes` wins when both are supplied. Values must be finite and non-negative; zero is allowed.
 
 ### Categories
 Look up Halo ticket categories so triage can assign `category_1`–`category_4` (the category name, matched to its level).

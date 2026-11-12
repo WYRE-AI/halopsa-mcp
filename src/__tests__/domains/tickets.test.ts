@@ -119,6 +119,21 @@ describe("Tickets Domain Handler", () => {
       expect(toolNames).toContain("halopsa_tickets_add_action");
     });
 
+    it("should document action time parameters as minutes", () => {
+      const tool = ticketsHandler.getTools().find((t) => t.name === "halopsa_tickets_add_action");
+      expect(tool?.description).toContain("minutes");
+      expect(tool?.inputSchema.properties).toMatchObject({
+        time_minutes: {
+          type: "number",
+          description: expect.stringMatching(/minutes.*decimal hours.*0\.25/),
+        },
+        timetaken: {
+          type: "number",
+          description: expect.stringMatching(/Deprecated alias for time_minutes.*minutes, not Halo hours/),
+        },
+      });
+    });
+
     it("halopsa_tickets_list should have correct schema", () => {
       const tools = ticketsHandler.getTools();
       const listTool = tools.find((t) => t.name === "halopsa_tickets_list");
@@ -577,6 +592,59 @@ describe("Tickets Domain Handler", () => {
         expect(data.note).toBe("New action");
       });
 
+      it.each(["time_minutes", "timetaken"])(
+        "should convert %s from minutes to hours",
+        async (param) => {
+          await ticketsHandler.handleCall("halopsa_tickets_add_action", {
+            ticket_id: 1,
+            note: "Time entry",
+            [param]: 15,
+          });
+          expect(mockActionsCreate).toHaveBeenCalledWith(
+            expect.objectContaining({ timetaken: 0.25 })
+          );
+        }
+      );
+
+      it("should prefer time_minutes when both parameters are supplied", async () => {
+        await ticketsHandler.handleCall("halopsa_tickets_add_action", {
+          ticket_id: 1,
+          note: "Time entry",
+          time_minutes: 15,
+          timetaken: 60,
+        });
+        expect(mockActionsCreate).toHaveBeenCalledWith(
+          expect.objectContaining({ timetaken: 0.25 })
+        );
+      });
+
+      it.each(["time_minutes", "timetaken"])("should allow zero %s", async (param) => {
+        await ticketsHandler.handleCall("halopsa_tickets_add_action", {
+          ticket_id: 1,
+          note: "Time entry",
+          [param]: 0,
+        });
+        expect(mockActionsCreate).toHaveBeenCalledWith(
+          expect.objectContaining({ timetaken: 0 })
+        );
+      });
+
+      it.each(
+        ["time_minutes", "timetaken"].flatMap((param) =>
+          [-1, NaN, Infinity, -Infinity].map((value) => ({ param, value }))
+        )
+      )("should reject $param=$value before calling the API", async ({ param, value }) => {
+        const result = await ticketsHandler.handleCall("halopsa_tickets_add_action", {
+          ticket_id: 1,
+          note: "Time entry",
+          [param]: value,
+        });
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain(param);
+        expect(result.content[0].text).toContain("minutes");
+        expect(mockActionsCreate).not.toHaveBeenCalled();
+      });
+
       it("should pass all action fields to API", async () => {
         await ticketsHandler.handleCall("halopsa_tickets_add_action", {
           ticket_id: 1,
@@ -590,7 +658,7 @@ describe("Tickets Domain Handler", () => {
           ticket_id: 1,
           note: "Action note",
           outcome: "Resolved",
-          timetaken: 30,
+          timetaken: 0.5,
           hiddenfromuser: true,
         });
       });
