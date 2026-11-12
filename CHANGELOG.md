@@ -14,6 +14,12 @@
 
 ### Fixed
 
+- **`halopsa_tickets_add_action` sent minutes as hours (WYREAI-762).**
+  The preferred `time_minutes` parameter and deprecated `timetaken` alias
+  both accept minutes and now convert to Halo decimal hours before posting
+  (15 minutes becomes 0.25 hours). `time_minutes` takes precedence when both
+  are supplied. Negative and non-finite values are rejected before API calls.
+
 - **The HTTP transport no longer exits on a malformed request.** The request
   target was parsed against the client-supplied `Host` header, and a value
   that does not parse (or a target such as `//`) threw inside the request

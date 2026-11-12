@@ -35,6 +35,23 @@ function ticketListCategories(args: Record<string, unknown>) {
   return ticketListCategorySchema.safeParse(args);
 }
 
+/** Convert MCP minutes to Halo's decimal hours without rounding. */
+function actionTimeHours(
+  args: Record<string, unknown>
+): { hours?: number; error?: string } {
+  for (const param of ["time_minutes", "timetaken"] as const) {
+    const value = args[param];
+    if (
+      value !== undefined &&
+      (typeof value !== "number" || !Number.isFinite(value) || value < 0)
+    ) {
+      return { error: `${param} must be a finite, non-negative number in minutes` };
+    }
+  }
+  const minutes = args.time_minutes ?? args.timetaken;
+  return { hours: minutes === undefined ? undefined : (minutes as number) / 60 };
+}
+
 /**
  * Get ticket domain tools
  */
@@ -191,7 +208,7 @@ function getTools(): Tool[] {
     {
       name: "halopsa_tickets_add_action",
       description:
-        "Add note to ticket. Halo rejects actions with no outcome, so a hidden/private note defaults to outcome \"Private Note\" when not supplied — pass outcome explicitly for a visible note.",
+        "Add note to ticket. Supply time_minutes (preferred) or timetaken in minutes, converted by the server to Halo decimal hours (15 minutes = 0.25 hours). Halo rejects actions with no outcome, so a hidden/private note defaults to outcome \"Private Note\" when not supplied — pass outcome explicitly for a visible note.",
       _meta: TICKET_CARD_META,
       inputSchema: {
         type: "object" as const,
@@ -207,9 +224,15 @@ function getTools(): Tool[] {
             description:
               "Required by Halo's API for every action; defaults to \"Private Note\" when hidden_from_user is true and this is omitted.",
           },
+          time_minutes: {
+            type: "number",
+            description:
+              "Time spent on this action, in minutes. The server converts this to Halo's timetaken as decimal hours (15 minutes → 0.25 hours) before the API call. Preferred over timetaken when both are provided.",
+          },
           timetaken: {
             type: "number",
-            description: "Minutes",
+            description:
+              "Deprecated alias for time_minutes. Value is minutes, not Halo hours; converted to decimal hours the same way. Prefer time_minutes when both are provided.",
           },
           hidden_from_user: {
             type: "boolean",
@@ -228,6 +251,14 @@ async function handleCall(
   toolName: string,
   args: Record<string, unknown>
 ): Promise<CallToolResult> {
+  const actionTime =
+    toolName === "halopsa_tickets_add_action" ? actionTimeHours(args) : {};
+  if (actionTime.error) {
+    return {
+      content: [{ type: "text", text: actionTime.error }],
+      isError: true,
+    };
+  }
   const client = await getClient();
 
   switch (toolName) {
@@ -411,7 +442,7 @@ async function handleCall(
         ticket_id: ticketId,
         note: args.note as string,
         outcome,
-        timetaken: args.timetaken as number | undefined,
+        timetaken: actionTime.hours,
         hiddenfromuser: hiddenFromUser,
       });
 
