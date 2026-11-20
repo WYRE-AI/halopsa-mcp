@@ -2,6 +2,13 @@
 
 ### Added
 
+- **Status, items catalog, and contract lookups (WYREAI-763).** New read-only
+  tools `halopsa_statuses_list` / `halopsa_statuses_get`,
+  `halopsa_items_list` / `halopsa_items_get`, and
+  `halopsa_contracts_list` / `halopsa_contracts_get`, each in its own
+  navigation domain. Lists are paginated (`limit` default 50, `page_no` from 1)
+  and reject invalid input before calling Halo. Contract records are returned
+  as Halo supplies them; computing hours used vs remaining is not done yet.
 - **Ticket category lookup and assignment.** `halopsa_categories_list` and
   `halopsa_categories_get` look up Halo category names. Ticket create and
   update accept optional `category_1`–`category_4`. `halopsa_tickets_list`

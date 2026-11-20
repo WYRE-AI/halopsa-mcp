@@ -48,6 +48,9 @@ const domainDescriptions: Record<Domain, string> = {
   agents: "Agent management - list and get support staff and technician information",
   invoices: "Invoice management - list and get billing and invoice information",
   categories: "Ticket categories - list and get Halo category values for category_1–category_4",
+  statuses: "Ticket statuses - list and get Halo status names and open/closed flags",
+  items: "Items catalog - list and get products, services, and bundles",
+  contracts: "Client contracts - list and get contracts, optionally for one client",
 };
 
 /**
@@ -74,7 +77,10 @@ const navigateTool: Tool = {
 - assets: ${domainDescriptions.assets}
 - agents: ${domainDescriptions.agents}
 - invoices: ${domainDescriptions.invoices}
-- categories: ${domainDescriptions.categories}`,
+- categories: ${domainDescriptions.categories}
+- statuses: ${domainDescriptions.statuses}
+- items: ${domainDescriptions.items}
+- contracts: ${domainDescriptions.contracts}`,
       },
     },
     required: ["domain"],
@@ -348,6 +354,18 @@ export function createMcpServer(): Server {
       }
       if (name.startsWith("halopsa_categories_")) {
         const handler = await getDomainHandler("categories");
+        return await handler.handleCall(name, toolArgs);
+      }
+      if (name.startsWith("halopsa_statuses_")) {
+        const handler = await getDomainHandler("statuses");
+        return await handler.handleCall(name, toolArgs);
+      }
+      if (name.startsWith("halopsa_items_")) {
+        const handler = await getDomainHandler("items");
+        return await handler.handleCall(name, toolArgs);
+      }
+      if (name.startsWith("halopsa_contracts_")) {
+        const handler = await getDomainHandler("contracts");
         return await handler.handleCall(name, toolArgs);
       }
 

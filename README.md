@@ -38,7 +38,7 @@ A Model Context Protocol (MCP) server for interacting with HaloPSA, featuring a 
 This MCP server uses a **hierarchical tool loading approach** instead of exposing all tools upfront:
 
 1. **Navigation Phase**: Initially exposes only a navigation tool (`halopsa_navigate`)
-2. **Domain Selection**: User selects a domain (tickets, clients, assets, agents, invoices, categories)
+2. **Domain Selection**: User selects a domain (tickets, clients, assets, agents, invoices, categories, statuses, items, contracts)
 3. **Domain Tools**: Server exposes domain-specific tools after selection
 4. **Lazy Loading**: Domain handlers and the HaloPSA client are loaded on-demand
 
@@ -143,6 +143,27 @@ Look up Halo ticket categories so triage can assign `category_1`–`category_4` 
 Tools:
 - `halopsa_categories_list` - List one page of ticket categories (`limit` defaults to 50; `page_no` starts at 1)
 - `halopsa_categories_get` - Get a category by ID
+
+### Statuses
+Look up Halo ticket statuses (id, name, open/closed flag).
+
+Tools:
+- `halopsa_statuses_list` - List one page of statuses (`limit` defaults to 50; `page_no` starts at 1)
+- `halopsa_statuses_get` - Get a status by ID
+
+### Items
+Read the Halo items catalog (products, services, bundles).
+
+Tools:
+- `halopsa_items_list` - List one page of catalog items; filter by `type`, `category`, `supplier_id`, `inactive`, or `search`
+- `halopsa_items_get` - Get a catalog item by ID
+
+### Contracts
+Read Halo client contracts. Records are returned as Halo supplies them.
+
+Tools:
+- `halopsa_contracts_list` - List one page of contracts; filter by `client_id`, `site_id`, `status`, `type`, `inactive`, or `search`
+- `halopsa_contracts_get` - Get a contract by ID
 
 ### Clients
 Manage companies/clients in HaloPSA.
