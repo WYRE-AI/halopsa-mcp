@@ -254,3 +254,22 @@ describe("Contracts domain handler", () => {
     expect(result.content[0].text).toContain("Unknown contract tool");
   });
 });
+
+describe("Bare-array list responses", () => {
+  // Halo lookup endpoints can return a bare JSON array instead of a wrapper.
+  it.each([
+    ["statuses", statusesHandler, "halopsa_statuses_list"],
+    ["items", itemsHandler, "halopsa_items_list"],
+    ["contracts", contractsHandler, "halopsa_contracts_list"],
+  ] as const)("returns %s rows when Halo answers with a bare array", async (key, handler, tool) => {
+    const rows = [{ id: 1 }, { id: 2 }];
+    mockClient[key].list.mockResolvedValue(rows);
+
+    const result = await handler.handleCall(tool, {});
+
+    expect(result.isError).toBeUndefined();
+    const data = JSON.parse(result.content[0].text);
+    expect(data[key]).toEqual(rows);
+    expect(data.record_count).toBe(2);
+  });
+});

@@ -1,8 +1,6 @@
-import { z, type ZodError } from "zod";
-import type { CallToolResult } from "./types.js";
+import { z } from "zod";
+import { pageNo, pageSize } from "./input-schema.js";
 
-const pageSize = z.number().int().positive().default(50);
-const pageNo = z.number().int().positive().default(1);
 const categoryName = z.string().optional();
 
 /**
@@ -57,14 +55,3 @@ export const ticketListCategorySchema = z.object({
   category_3: unsupportedListCategory(3),
   category_4: unsupportedListCategory(4),
 });
-
-/** Formats a category-input validation failure as an MCP tool error. */
-export function invalidCategoryInput(error: ZodError): CallToolResult {
-  return {
-    content: [{
-      type: "text",
-      text: error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; "),
-    }],
-    isError: true,
-  };
-}

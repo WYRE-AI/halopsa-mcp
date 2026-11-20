@@ -9,10 +9,11 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { DomainHandler, CallToolResult } from "../utils/types.js";
 import { getClient } from "../utils/client.js";
+import { invalidInput } from "../utils/input-schema.js";
+import { normalizeList } from "../utils/list-response.js";
 import {
   contractGetSchema,
   contractListSchema,
-  invalidCatalogInput,
 } from "../utils/catalog-input.js";
 
 function getTools(): Tool[] {
@@ -20,7 +21,7 @@ function getTools(): Tool[] {
     {
       name: "halopsa_contracts_list",
       description:
-        "List one page of Halo client contracts, optionally for one client. Records are returned as Halo supplies them.",
+        "List one page of Halo client contracts, optionally for one client. Records are returned as Halo supplies them. The filters are sent to Halo as query parameters, which ignores any it does not support, so check that returned records match the client_id, site_id, status, type and inactive filters you set.",
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -60,24 +61,27 @@ async function handleCall(
   switch (toolName) {
     case "halopsa_contracts_list": {
       const parsed = contractListSchema.safeParse(args);
-      if (!parsed.success) return invalidCatalogInput(parsed.error);
+      if (!parsed.success) return invalidInput(parsed.error);
       const { limit, page_no: pageNo, ...filters } = parsed.data;
-      const response = await client.contracts.list({
-        ...filters,
-        pageSize: limit,
-        pageNo,
-        count: true,
-      });
+      const { record_count, rows } = normalizeList(
+        await client.contracts.list({
+          ...filters,
+          pageSize: limit,
+          pageNo,
+          count: true,
+        }),
+        "contracts"
+      );
       return {
         content: [
           {
             type: "text",
             text: JSON.stringify(
               {
-                record_count: response.record_count,
+                record_count,
                 page_no: pageNo,
                 page_size: limit,
-                contracts: response.contracts,
+                contracts: rows,
               },
               null,
               2
@@ -89,7 +93,7 @@ async function handleCall(
 
     case "halopsa_contracts_get": {
       const parsed = contractGetSchema.safeParse(args);
-      if (!parsed.success) return invalidCatalogInput(parsed.error);
+      if (!parsed.success) return invalidInput(parsed.error);
       const contract = await client.contracts.get(parsed.data.contract_id);
       return { content: [{ type: "text", text: JSON.stringify(contract, null, 2) }] };
     }

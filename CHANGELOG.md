@@ -9,6 +9,8 @@
   navigation domain. Lists are paginated (`limit` default 50, `page_no` from 1)
   and reject invalid input before calling Halo. Contract records are returned
   as Halo supplies them; computing hours used vs remaining is not done yet.
+  The item and contract filters are sent to Halo as query parameters and are
+  best-effort until confirmed against a tenant.
 - **Ticket category lookup and assignment.** `halopsa_categories_list` and
   `halopsa_categories_get` look up Halo category names. Ticket create and
   update accept optional `category_1`–`category_4`. `halopsa_tickets_list`
@@ -21,6 +23,9 @@
 
 ### Fixed
 
+- **Category, status, item, and contract lists accept a bare JSON array.**
+  If Halo answers a lookup with an array instead of a wrapped object, the
+  rows are now returned instead of being dropped and reported as empty.
 - **`halopsa_tickets_add_action` sent minutes as hours (WYREAI-762).**
   The preferred `time_minutes` parameter and deprecated `timetaken` alias
   both accept minutes and now convert to Halo decimal hours before posting

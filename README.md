@@ -145,7 +145,7 @@ Tools:
 - `halopsa_categories_get` - Get a category by ID
 
 ### Statuses
-Look up Halo ticket statuses (id, name, open/closed flag).
+Look up Halo ticket statuses (id and name). Records are returned as Halo supplies them.
 
 Tools:
 - `halopsa_statuses_list` - List one page of statuses (`limit` defaults to 50; `page_no` starts at 1)
@@ -155,14 +155,14 @@ Tools:
 Read the Halo items catalog (products, services, bundles).
 
 Tools:
-- `halopsa_items_list` - List one page of catalog items; filter by `type`, `category`, `supplier_id`, `inactive`, or `search`
+- `halopsa_items_list` - List one page of catalog items; filter by `type`, `category`, `supplier_id`, `inactive`, or `search` (filters are sent to Halo as query parameters and are best-effort until checked against a tenant)
 - `halopsa_items_get` - Get a catalog item by ID
 
 ### Contracts
 Read Halo client contracts. Records are returned as Halo supplies them.
 
 Tools:
-- `halopsa_contracts_list` - List one page of contracts; filter by `client_id`, `site_id`, `status`, `type`, `inactive`, or `search`
+- `halopsa_contracts_list` - List one page of contracts; filter by `client_id`, `site_id`, `status`, `type`, `inactive`, or `search` (filters are sent to Halo as query parameters and are best-effort until checked against a tenant)
 - `halopsa_contracts_get` - Get a contract by ID
 
 ### Clients

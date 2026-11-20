@@ -48,7 +48,7 @@ const domainDescriptions: Record<Domain, string> = {
   agents: "Agent management - list and get support staff and technician information",
   invoices: "Invoice management - list and get billing and invoice information",
   categories: "Ticket categories - list and get Halo category values for category_1–category_4",
-  statuses: "Ticket statuses - list and get Halo status names and open/closed flags",
+  statuses: "Ticket statuses - list and get Halo status ids and names",
   items: "Items catalog - list and get products, services, and bundles",
   contracts: "Client contracts - list and get contracts, optionally for one client",
 };

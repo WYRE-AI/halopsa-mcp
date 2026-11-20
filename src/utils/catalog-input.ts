@@ -1,8 +1,6 @@
-import { z, type ZodError } from "zod";
-import type { CallToolResult } from "./types.js";
+import { z } from "zod";
+import { pageNo, pageSize } from "./input-schema.js";
 
-const pageSize = z.number().int().positive().default(50);
-const pageNo = z.number().int().positive().default(1);
 const id = z.number().int().positive();
 
 /** Validates `halopsa_statuses_list` arguments. */
@@ -44,18 +42,3 @@ export const contractListSchema = z.object({
 
 /** Validates `halopsa_contracts_get` arguments. */
 export const contractGetSchema = z.object({ contract_id: id });
-
-/** Formats an input validation failure as an MCP tool error. */
-export function invalidCatalogInput(error: ZodError): CallToolResult {
-  return {
-    content: [
-      {
-        type: "text",
-        text: error.issues
-          .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
-          .join("; "),
-      },
-    ],
-    isError: true,
-  };
-}

@@ -118,6 +118,9 @@ import {
   clearDomainCache,
 } from "../domains/index.js";
 import { isDomainName } from "../utils/types.js";
+import { createMcpServer } from "../mcp-server.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 describe("Domain Navigation", () => {
   beforeEach(() => {
@@ -390,4 +393,37 @@ describe("Domain Tools Structure", () => {
       expect(toolNames).toContain(`halopsa_${domain}_get`);
     }
   );
+});
+
+describe("CallTool routing", () => {
+  beforeEach(() => {
+    clearDomainCache();
+    vi.clearAllMocks();
+  });
+
+  it.each([
+    "tickets",
+    "clients",
+    "assets",
+    "agents",
+    "invoices",
+    "categories",
+    "statuses",
+    "items",
+    "contracts",
+  ] as const)("routes halopsa_%s_* to its own handler", async (domain) => {
+    mockHandlers[domain].handleCall.mockResolvedValue({
+      content: [{ type: "text", text: domain }],
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer();
+    const client = new Client({ name: "routing-test", version: "0.0.0" });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    const result = await client.callTool({ name: `halopsa_${domain}_list`, arguments: {} });
+    await client.close();
+
+    expect(mockHandlers[domain].handleCall).toHaveBeenCalledWith(`halopsa_${domain}_list`, {});
+    expect(result.content).toEqual([{ type: "text", text: domain }]);
+  });
 });
