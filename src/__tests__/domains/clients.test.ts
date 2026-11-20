@@ -16,7 +16,10 @@ const { mockClientsList, mockClientsGet, mockClientsCreate, mockClient } =
         list: mockClientsList,
         get: mockClientsGet,
         create: mockClientsCreate,
+        update: vi.fn(),
       },
+      contacts: { list: vi.fn(), create: vi.fn(), update: vi.fn() },
+      sites: { list: vi.fn() },
     };
 
     return {
@@ -71,13 +74,18 @@ describe("Clients Domain Handler", () => {
     it("should return all client tools", () => {
       const tools = clientsHandler.getTools();
 
-      expect(tools.length).toBe(4);
+      expect(tools.length).toBe(9);
 
       const toolNames = tools.map((t) => t.name);
       expect(toolNames).toContain("halopsa_clients_list");
       expect(toolNames).toContain("halopsa_clients_get");
       expect(toolNames).toContain("halopsa_clients_create");
       expect(toolNames).toContain("halopsa_clients_search");
+      expect(toolNames).toContain("halopsa_clients_update");
+      expect(toolNames).toContain("halopsa_clients_list_contacts");
+      expect(toolNames).toContain("halopsa_clients_create_contact");
+      expect(toolNames).toContain("halopsa_clients_update_contact");
+      expect(toolNames).toContain("halopsa_clients_list_sites");
     });
 
     it("halopsa_clients_list should have correct schema", () => {
@@ -213,6 +221,102 @@ describe("Clients Domain Handler", () => {
         });
       });
     });
+
+  describe("job-depth tools (WYREAI-704)", () => {
+    beforeEach(() => {
+      mockClient.clients.update.mockReset().mockResolvedValue({ id: 1, name: "Renamed" });
+      mockClient.contacts.list.mockReset().mockResolvedValue({
+        record_count: 1,
+        users: [{ id: 9, name: "Pat Example", client_id: 1 }],
+      });
+      mockClient.contacts.create.mockReset().mockResolvedValue({ id: 10, name: "New User" });
+      mockClient.contacts.update.mockReset().mockResolvedValue({ id: 9, inactive: true });
+      mockClient.sites.list.mockReset().mockResolvedValue({
+        record_count: 1,
+        sites: [{ id: 4, name: "Main", client_id: 1 }],
+      });
+    });
+
+    it("updates a client with only the passed fields", async () => {
+      const result = await clientsHandler.handleCall("halopsa_clients_update", {
+        client_id: 1,
+        name: "Renamed",
+      });
+      expect(result.isError).toBeUndefined();
+      expect(mockClient.clients.update).toHaveBeenCalledWith(1, { name: "Renamed" });
+    });
+
+    it("rejects a client update with no changes", async () => {
+      const result = await clientsHandler.handleCall("halopsa_clients_update", { client_id: 1 });
+      expect(result.isError).toBe(true);
+      expect(mockClient.clients.update).not.toHaveBeenCalled();
+    });
+
+    it("lists contacts with paging and the wrapped users key", async () => {
+      const result = await clientsHandler.handleCall("halopsa_clients_list_contacts", {
+        client_id: 1,
+      });
+      const data = JSON.parse(result.content[0].text);
+      expect(data.contacts).toHaveLength(1);
+      expect(data.page_size).toBe(50);
+      expect(mockClient.contacts.list).toHaveBeenCalledWith({
+        client_id: 1,
+        pageSize: 50,
+        pageNo: 1,
+        count: true,
+      });
+    });
+
+    it("creates a contact and validates required fields", async () => {
+      const bad = await clientsHandler.handleCall("halopsa_clients_create_contact", {
+        client_id: 1,
+      });
+      expect(bad.isError).toBe(true);
+      expect(mockClient.contacts.create).not.toHaveBeenCalled();
+
+      const ok = await clientsHandler.handleCall("halopsa_clients_create_contact", {
+        client_id: 1,
+        name: "New User",
+        emailaddress: "new.user@example.com",
+      });
+      expect(ok.isError).toBeUndefined();
+      expect(mockClient.contacts.create).toHaveBeenCalledWith({
+        client_id: 1,
+        name: "New User",
+        emailaddress: "new.user@example.com",
+      });
+    });
+
+    it("deactivates a contact and rejects an empty update", async () => {
+      const ok = await clientsHandler.handleCall("halopsa_clients_update_contact", {
+        contact_id: 9,
+        inactive: true,
+      });
+      expect(ok.isError).toBeUndefined();
+      expect(mockClient.contacts.update).toHaveBeenCalledWith(9, { inactive: true });
+
+      const bad = await clientsHandler.handleCall("halopsa_clients_update_contact", {
+        contact_id: 9,
+      });
+      expect(bad.isError).toBe(true);
+    });
+
+    it("lists sites for a client", async () => {
+      const result = await clientsHandler.handleCall("halopsa_clients_list_sites", {
+        client_id: 1,
+        page_no: 2,
+      });
+      const data = JSON.parse(result.content[0].text);
+      expect(data.sites[0].id).toBe(4);
+      expect(data.page_no).toBe(2);
+      expect(mockClient.sites.list).toHaveBeenCalledWith({
+        client_id: 1,
+        pageSize: 50,
+        pageNo: 2,
+        count: true,
+      });
+    });
+  });
 
     describe("unknown tool", () => {
       it("should return error for unknown tool", async () => {
