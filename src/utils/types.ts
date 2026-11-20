@@ -34,7 +34,10 @@ export type DomainName =
   | "assets"
   | "agents"
   | "invoices"
-  | "categories";
+  | "categories"
+  | "statuses"
+  | "items"
+  | "contracts";
 
 /**
  * Check if a string is a valid domain name
@@ -47,5 +50,8 @@ export function isDomainName(value: string): value is DomainName {
     "agents",
     "invoices",
     "categories",
+    "statuses",
+    "items",
+    "contracts",
   ].includes(value);
 }
