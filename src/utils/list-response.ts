@@ -8,6 +8,8 @@ export function normalizeList<T>(
   key: string
 ): { record_count: number; rows: T[] } {
   if (Array.isArray(response)) {
+    // A bare array carries no total, so record_count is the length of this
+    // page; with pagination it may understate the full set.
     return { record_count: response.length, rows: response as T[] };
   }
   const wrapped = (response ?? {}) as Record<string, unknown>;
