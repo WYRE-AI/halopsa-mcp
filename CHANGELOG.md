@@ -2,6 +2,12 @@
 
 ### Added
 
+- **Job-depth tools for onboarding (WYREAI-704).** `halopsa_clients_update`,
+  `halopsa_clients_list_contacts`, `halopsa_clients_create_contact`,
+  `halopsa_clients_update_contact` and `halopsa_clients_list_sites` cover the
+  create-or-update path for companies, users and sites. Updates reject calls
+  that change nothing. They use SDK resources that already exist; the filters
+  on the lists are best-effort until confirmed against a tenant.
 - **Status, items catalog, and contract lookups (WYREAI-763).** New read-only
   tools `halopsa_statuses_list` / `halopsa_statuses_get`,
   `halopsa_items_list` / `halopsa_items_get`, and
