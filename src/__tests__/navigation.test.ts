@@ -49,6 +49,27 @@ const { mockHandlers } = vi.hoisted(() => {
       ]),
       handleCall: vi.fn(),
     },
+    statuses: {
+      getTools: vi.fn().mockReturnValue([
+        { name: "halopsa_statuses_list", description: "List statuses" },
+        { name: "halopsa_statuses_get", description: "Get status" },
+      ]),
+      handleCall: vi.fn(),
+    },
+    items: {
+      getTools: vi.fn().mockReturnValue([
+        { name: "halopsa_items_list", description: "List items" },
+        { name: "halopsa_items_get", description: "Get item" },
+      ]),
+      handleCall: vi.fn(),
+    },
+    contracts: {
+      getTools: vi.fn().mockReturnValue([
+        { name: "halopsa_contracts_list", description: "List contracts" },
+        { name: "halopsa_contracts_get", description: "Get contract" },
+      ]),
+      handleCall: vi.fn(),
+    },
   };
 
   return { mockHandlers };
@@ -79,12 +100,27 @@ vi.mock("../domains/categories.js", () => ({
   categoriesHandler: mockHandlers.categories,
 }));
 
+vi.mock("../domains/statuses.js", () => ({
+  statusesHandler: mockHandlers.statuses,
+}));
+
+vi.mock("../domains/items.js", () => ({
+  itemsHandler: mockHandlers.items,
+}));
+
+vi.mock("../domains/contracts.js", () => ({
+  contractsHandler: mockHandlers.contracts,
+}));
+
 import {
   getDomainHandler,
   getAvailableDomains,
   clearDomainCache,
 } from "../domains/index.js";
 import { isDomainName } from "../utils/types.js";
+import { createMcpServer } from "../mcp-server.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 describe("Domain Navigation", () => {
   beforeEach(() => {
@@ -116,6 +152,12 @@ describe("Domain Navigation", () => {
       { name: "halopsa_categories_list", description: "List categories" },
       { name: "halopsa_categories_get", description: "Get category" },
     ]);
+    for (const domain of ["statuses", "items", "contracts"] as const) {
+      mockHandlers[domain].getTools.mockReturnValue([
+        { name: `halopsa_${domain}_list`, description: `List ${domain}` },
+        { name: `halopsa_${domain}_get`, description: `Get ${domain}` },
+      ]);
+    }
   });
 
   describe("getAvailableDomains", () => {
@@ -129,6 +171,9 @@ describe("Domain Navigation", () => {
         "agents",
         "invoices",
         "categories",
+        "statuses",
+        "items",
+        "contracts",
       ]);
     });
 
@@ -148,6 +193,9 @@ describe("Domain Navigation", () => {
       expect(isDomainName("agents")).toBe(true);
       expect(isDomainName("invoices")).toBe(true);
       expect(isDomainName("categories")).toBe(true);
+      expect(isDomainName("statuses")).toBe(true);
+      expect(isDomainName("items")).toBe(true);
+      expect(isDomainName("contracts")).toBe(true);
     });
 
     it("should return false for invalid domain names", () => {
@@ -201,6 +249,16 @@ describe("Domain Navigation", () => {
       expect(handler).toBeDefined();
       expect(handler.getTools()).toHaveLength(2);
     });
+
+    it.each(["statuses", "items", "contracts"] as const)(
+      "should load %s domain handler",
+      async (domain) => {
+        const handler = await getDomainHandler(domain);
+
+        expect(handler).toBeDefined();
+        expect(handler.getTools()).toHaveLength(2);
+      }
+    );
 
     it("should cache domain handlers", async () => {
       const handler1 = await getDomainHandler("tickets");
@@ -263,6 +321,12 @@ describe("Domain Tools Structure", () => {
       { name: "halopsa_categories_list", description: "List categories" },
       { name: "halopsa_categories_get", description: "Get category" },
     ]);
+    for (const domain of ["statuses", "items", "contracts"] as const) {
+      mockHandlers[domain].getTools.mockReturnValue([
+        { name: `halopsa_${domain}_list`, description: `List ${domain}` },
+        { name: `halopsa_${domain}_get`, description: `Get ${domain}` },
+      ]);
+    }
   });
 
   it("tickets domain should expose ticket-specific tools", async () => {
@@ -317,5 +381,49 @@ describe("Domain Tools Structure", () => {
     const toolNames = tools.map((t) => t.name);
     expect(toolNames).toContain("halopsa_categories_list");
     expect(toolNames).toContain("halopsa_categories_get");
+  });
+
+  it.each(["statuses", "items", "contracts"] as const)(
+    "%s domain should expose list and get tools",
+    async (domain) => {
+      const handler = await getDomainHandler(domain);
+      const toolNames = handler.getTools().map((t) => t.name);
+
+      expect(toolNames).toContain(`halopsa_${domain}_list`);
+      expect(toolNames).toContain(`halopsa_${domain}_get`);
+    }
+  );
+});
+
+describe("CallTool routing", () => {
+  beforeEach(() => {
+    clearDomainCache();
+    vi.clearAllMocks();
+  });
+
+  it.each([
+    "tickets",
+    "clients",
+    "assets",
+    "agents",
+    "invoices",
+    "categories",
+    "statuses",
+    "items",
+    "contracts",
+  ] as const)("routes halopsa_%s_* to its own handler", async (domain) => {
+    mockHandlers[domain].handleCall.mockResolvedValue({
+      content: [{ type: "text", text: domain }],
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer();
+    const client = new Client({ name: "routing-test", version: "0.0.0" });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    const result = await client.callTool({ name: `halopsa_${domain}_list`, arguments: {} });
+    await client.close();
+
+    expect(mockHandlers[domain].handleCall).toHaveBeenCalledWith(`halopsa_${domain}_list`, {});
+    expect(result.content).toEqual([{ type: "text", text: domain }]);
   });
 });

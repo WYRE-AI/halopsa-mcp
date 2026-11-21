@@ -88,6 +88,20 @@ describe("Categories Domain Handler", () => {
 
   describe("handleCall", () => {
     describe("halopsa_categories_list", () => {
+      it("should return the rows when Halo answers with a bare array", async () => {
+        const rows = [{ id: 1, name: "Hardware", level: 1, inactive: false }];
+        mockCategoriesList.mockResolvedValue(rows);
+
+        const result = await categoriesHandler.handleCall(
+          "halopsa_categories_list",
+          {}
+        );
+
+        const data = JSON.parse(result.content[0].text);
+        expect(data.categories).toEqual(rows);
+        expect(data.record_count).toBe(1);
+      });
+
       it("should list categories with the default page size", async () => {
         const result = await categoriesHandler.handleCall(
           "halopsa_categories_list",

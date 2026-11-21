@@ -9,10 +9,11 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { DomainHandler, CallToolResult } from "../utils/types.js";
 import { getClient } from "../utils/client.js";
+import { invalidInput } from "../utils/input-schema.js";
+import { normalizeList } from "../utils/list-response.js";
 import {
   categoryGetSchema,
   categoryListSchema,
-  invalidCategoryInput,
 } from "../utils/category-input.js";
 
 /**
@@ -77,7 +78,7 @@ async function handleCall(
   switch (toolName) {
     case "halopsa_categories_list": {
       const parsed = categoryListSchema.safeParse(args);
-      if (!parsed.success) return invalidCategoryInput(parsed.error);
+      if (!parsed.success) return invalidInput(parsed.error);
       const { limit, page_no: pageNo, inactive, search } = parsed.data;
       const request = {
         inactive,
@@ -87,7 +88,10 @@ async function handleCall(
         pageinate: true,
         count: true,
       };
-      const response = await client.categories.list(request);
+      const { record_count, rows } = normalizeList(
+        await client.categories.list(request),
+        "categories"
+      );
 
       return {
         content: [
@@ -95,10 +99,10 @@ async function handleCall(
             type: "text",
             text: JSON.stringify(
               {
-                record_count: response.record_count,
+                record_count,
                 page_no: pageNo,
                 page_size: limit,
-                categories: response.categories,
+                categories: rows,
               },
               null,
               2
@@ -110,7 +114,7 @@ async function handleCall(
 
     case "halopsa_categories_get": {
       const parsed = categoryGetSchema.safeParse(args);
-      if (!parsed.success) return invalidCategoryInput(parsed.error);
+      if (!parsed.success) return invalidInput(parsed.error);
       const category = await client.categories.get(parsed.data.category_id);
 
       return {

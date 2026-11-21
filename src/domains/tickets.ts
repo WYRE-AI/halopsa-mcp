@@ -10,8 +10,8 @@ import type { DomainHandler, CallToolResult } from "../utils/types.js";
 import { getClient } from "../utils/client.js";
 import { elicitSelection } from "../utils/elicitation.js";
 import { buildTicketCard, TICKET_CARD_META } from "../card.builder.js";
+import { invalidInput } from "../utils/input-schema.js";
 import {
-  invalidCategoryInput,
   ticketCategorySchema,
   ticketListCategorySchema,
 } from "../utils/category-input.js";
@@ -264,7 +264,7 @@ async function handleCall(
   switch (toolName) {
     case "halopsa_tickets_list": {
       const categories = ticketListCategories(args);
-      if (!categories.success) return invalidCategoryInput(categories.error);
+      if (!categories.success) return invalidInput(categories.error);
       const limit = (args.limit as number) || 50;
       // HaloPSA ignores page_size unless page_no is on the same request, and
       // then uses its own page size (50) for that implicit first page. A
@@ -391,7 +391,7 @@ async function handleCall(
 
     case "halopsa_tickets_create": {
       const categories = ticketCategories(args);
-      if (!categories.success) return invalidCategoryInput(categories.error);
+      if (!categories.success) return invalidInput(categories.error);
       const ticket = await client.tickets.create({
         summary: args.summary as string,
         details: args.details as string | undefined,
@@ -413,7 +413,7 @@ async function handleCall(
 
     case "halopsa_tickets_update": {
       const categories = ticketCategories(args);
-      if (!categories.success) return invalidCategoryInput(categories.error);
+      if (!categories.success) return invalidInput(categories.error);
       const ticketId = args.ticket_id as number;
       const ticket = await client.tickets.update(ticketId, {
         summary: args.summary as string | undefined,
