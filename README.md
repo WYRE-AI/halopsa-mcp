@@ -41,7 +41,7 @@ A Model Context Protocol (MCP) server for interacting with HaloPSA, featuring a 
 This MCP server uses a **hierarchical tool loading approach** instead of exposing all tools upfront:
 
 1. **Navigation Phase**: Initially exposes only a navigation tool (`halopsa_navigate`)
-2. **Domain Selection**: User selects a domain (tickets, clients, assets, agents, invoices, categories)
+2. **Domain Selection**: User selects a domain (tickets, clients, assets, agents, invoices, categories, statuses, items, contracts)
 3. **Domain Tools**: Server exposes domain-specific tools after selection
 4. **Lazy Loading**: Domain handlers and the HaloPSA client are loaded on-demand
 
@@ -182,7 +182,7 @@ Tools:
 - `halopsa_tickets_get` - Get ticket details
 - `halopsa_tickets_create` - Create a new ticket (optional `category_1`–`category_4`)
 - `halopsa_tickets_update` - Update an existing ticket (optional `category_1`–`category_4`)
-- `halopsa_tickets_add_action` - Add a note/action to a ticket
+- `halopsa_tickets_add_action` - Add a note/action to a ticket. Supply time spent in minutes using `time_minutes` (preferred) or the deprecated `timetaken` alias. The server converts minutes to Halo decimal hours (15 minutes → 0.25 hours); `time_minutes` wins when both are supplied. Values must be finite and non-negative; zero is allowed.
 
 ### Categories
 Look up Halo ticket categories so triage can assign `category_1`–`category_4` (the category name, matched to its level).
@@ -190,6 +190,27 @@ Look up Halo ticket categories so triage can assign `category_1`–`category_4` 
 Tools:
 - `halopsa_categories_list` - List one page of ticket categories (`limit` defaults to 50; `page_no` starts at 1)
 - `halopsa_categories_get` - Get a category by ID
+
+### Statuses
+Look up Halo ticket statuses (id and name). Records are returned as Halo supplies them.
+
+Tools:
+- `halopsa_statuses_list` - List one page of statuses (`limit` defaults to 50; `page_no` starts at 1)
+- `halopsa_statuses_get` - Get a status by ID
+
+### Items
+Read the Halo items catalog (products, services, bundles).
+
+Tools:
+- `halopsa_items_list` - List one page of catalog items; filter by `type`, `category`, `supplier_id`, `inactive`, or `search` (filters are sent to Halo as query parameters and are best-effort until checked against a tenant)
+- `halopsa_items_get` - Get a catalog item by ID
+
+### Contracts
+Read Halo client contracts. Records are returned as Halo supplies them.
+
+Tools:
+- `halopsa_contracts_list` - List one page of contracts; filter by `client_id`, `site_id`, `status`, `type`, `inactive`, or `search` (filters are sent to Halo as query parameters and are best-effort until checked against a tenant)
+- `halopsa_contracts_get` - Get a contract by ID
 
 ### Clients
 Manage companies/clients in HaloPSA.

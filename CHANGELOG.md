@@ -2,6 +2,15 @@
 
 ### Added
 
+- **Status, items catalog, and contract lookups (WYREAI-763).** New read-only
+  tools `halopsa_statuses_list` / `halopsa_statuses_get`,
+  `halopsa_items_list` / `halopsa_items_get`, and
+  `halopsa_contracts_list` / `halopsa_contracts_get`, each in its own
+  navigation domain. Lists are paginated (`limit` default 50, `page_no` from 1)
+  and reject invalid input before calling Halo. Contract records are returned
+  as Halo supplies them; computing hours used vs remaining is not done yet.
+  The item and contract filters are sent to Halo as query parameters and are
+  best-effort until confirmed against a tenant.
 - **Ticket category lookup and assignment.** `halopsa_categories_list` and
   `halopsa_categories_get` look up Halo category names. Ticket create and
   update accept optional `category_1`–`category_4`. `halopsa_tickets_list`
@@ -24,6 +33,21 @@
 
 ### Fixed
 
+- **Category, status, item, and contract lists accept a bare JSON array.**
+  If Halo answers a lookup with an array instead of a wrapped object, the
+  rows are now returned instead of being dropped and reported as empty.
+- **`halopsa_tickets_add_action` sent minutes as hours (WYREAI-762).**
+  The preferred `time_minutes` parameter and deprecated `timetaken` alias
+  both accept minutes and now convert to Halo decimal hours before posting
+  (15 minutes becomes 0.25 hours). `time_minutes` takes precedence when both
+  are supplied. Negative and non-finite values are rejected before API calls.
+
+- **The HTTP transport no longer exits on a malformed request.** The request
+  target was parsed against the client-supplied `Host` header, and a value
+  that does not parse (or a target such as `//`) threw inside the request
+  listener and terminated the process. The target is now parsed against a
+  fixed base, so `Host` is no longer consulted, and a target that still cannot
+  be parsed gets a `400` JSON response while the server keeps running.
 - **HaloPSA token mint could 500 while `halopsa_status` still said credentials
   were OK (WYREAI-370).** Status only checked that a client id, secret, and
   tenant/base URL were *present* — it never called `/auth/token`. Data tools
