@@ -10,8 +10,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { connect, createServer as createNetServer } from 'node:net';
 import type { Server } from 'node:http';
 
-// src/index.ts starts its listener at import time and keeps the server private,
-// so record whatever it creates in order to close it in afterAll.
+// Record the server src/index.ts creates in order to close it in afterAll.
 const httpServers = vi.hoisted(() => [] as Server[]);
 vi.mock('node:http', async (importOriginal) => {
   const http = await importOriginal<typeof import('node:http')>();
@@ -44,8 +43,10 @@ beforeAll(async () => {
   process.env.MCP_TRANSPORT = 'http';
   process.env.MCP_HTTP_PORT = String(port);
   process.env.MCP_HTTP_HOST = '127.0.0.1';
-  delete process.env.CONDUIT_S2S_SECRET;
-  await import('../index.js');
+  // HTTP refuses to start without a real secret; use one so the fail-closed path is what's probed.
+  process.env.CONDUIT_S2S_SECRET = 'malformed-request-test-secret-0123456789';
+  const { startHttpTransport } = await import('../index.js');
+  await startHttpTransport();
   expect(httpServers).toHaveLength(1); // guards the afterAll cleanup below
   await waitForServerReady();
 });
@@ -95,6 +96,12 @@ describe('malformed requests on the Node HTTP entrypoint', () => {
   it('serves a request with a malformed Host header and keeps running', async () => {
     const res = await rawRequest('GET /health HTTP/1.1\r\nHost: [\r\nConnection: close\r\n\r\n');
     expect(res.status).toBe('HTTP/1.1 200 OK');
+    expect((await rawRequest(HEALTH)).status).toBe('HTTP/1.1 200 OK');
+  });
+
+  it('rejects /mcp with a malformed Host header with 401 (no S2S) and keeps running', async () => {
+    const res = await rawRequest('POST /mcp HTTP/1.1\r\nHost: [::1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n');
+    expect(res.status).toBe('HTTP/1.1 401 Unauthorized');
     expect((await rawRequest(HEALTH)).status).toBe('HTTP/1.1 200 OK');
   });
 

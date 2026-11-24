@@ -17,7 +17,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { credentialStore } from "../utils/client.js";
 import { startHttpTransport } from "../index.js";
 
-const S2S_SECRET = "s2s-do-not-log-7f3a";
+const S2S_SECRET = "s2s-do-not-log-7f3a-0123456789abcdef";
 const ENV_CLIENT_ID = "env-client-id-must-not-be-used";
 const ENV_CLIENT_SECRET = "env-secret-must-not-be-used";
 const ENV_TENANT = "env-tenant-must-not-be-used";
@@ -229,6 +229,26 @@ describe("HTTP startup", () => {
       logs.restore();
     }
   });
+
+  it.each(["q7Zq", "0123456789abcdef0123456789abcde"])(
+    "refuses a secret shorter than 32 characters (%j), even with MCP_ALLOW_INSECURE_DEV=1",
+    async (short) => {
+      process.env.CONDUIT_S2S_SECRET = short;
+      process.env.MCP_ALLOW_INSECURE_DEV = "1";
+      const logs = captureStderr();
+      const exit = mockExit();
+      try {
+        await expect(startHttpTransport()).rejects.toThrow("process.exit:1");
+        const text = logs.text();
+        expect(text).toContain("shorter than 32 characters");
+        expect(text).not.toContain("SECURITY WARNING");
+        expect(text).not.toContain(short);
+      } finally {
+        exit.restore();
+        logs.restore();
+      }
+    }
+  );
 
   it("allows startup with a warning when MCP_ALLOW_INSECURE_DEV=1 and binds 127.0.0.1", async () => {
     delete process.env.MCP_HTTP_HOST;

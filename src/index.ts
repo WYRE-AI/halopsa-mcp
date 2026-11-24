@@ -65,6 +65,9 @@ const KNOWN_PLACEHOLDER_SECRETS = new Set([
   "s2s-secret",
 ]);
 
+/** Shortest accepted secret. `openssl rand -hex 16` is 32; the gateway subkey is 64 hex. */
+const MIN_S2S_SECRET_LENGTH = 32;
+
 const LOOPBACK_HOST = "127.0.0.1";
 
 const MISSING_S2S_SECRET_ERROR =
@@ -76,6 +79,10 @@ const PLACEHOLDER_S2S_SECRET_ERROR =
   "Refusing to start HTTP transport: CONDUIT_S2S_SECRET is a known placeholder. " +
   "Generate a secret with `openssl rand -hex 32` and set CONDUIT_S2S_SECRET to that value. " +
   "MCP_ALLOW_INSECURE_DEV does not accept a placeholder.";
+
+const SHORT_S2S_SECRET_ERROR =
+  `Refusing to start HTTP transport: CONDUIT_S2S_SECRET is shorter than ${MIN_S2S_SECRET_LENGTH} characters. ` +
+  "Generate a secret with `openssl rand -hex 32` and set CONDUIT_S2S_SECRET to that value.";
 
 const INSECURE_DEV_WARNING =
   "SECURITY WARNING: CONDUIT_S2S_SECRET is empty and MCP_ALLOW_INSECURE_DEV=1. " +
@@ -117,6 +124,9 @@ function resolveS2sSecret(env: NodeJS.ProcessEnv = process.env): {
   const raw = (env.CONDUIT_S2S_SECRET ?? "").trim();
   if (raw && KNOWN_PLACEHOLDER_SECRETS.has(raw.toLowerCase())) {
     refuseStart(PLACEHOLDER_S2S_SECRET_ERROR);
+  }
+  if (raw && raw.length < MIN_S2S_SECRET_LENGTH) {
+    refuseStart(SHORT_S2S_SECRET_ERROR);
   }
   if (raw) return { secret: raw, insecureDev: false };
   if (env.MCP_ALLOW_INSECURE_DEV === "1") {
