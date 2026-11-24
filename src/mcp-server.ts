@@ -208,7 +208,7 @@ export function buildCredentials(
   if (!clientId || !clientSecret) {
     return {
       error:
-        "Missing credentials: X-Halo-Client-ID / X-Halo-Client-Secret (or HALOPSA_CLIENT_ID / HALOPSA_CLIENT_SECRET)",
+        "Missing credentials: X-Halo-Client-ID / X-Halo-Client-Secret",
     };
   }
 
@@ -221,7 +221,7 @@ export function buildCredentials(
   if (!tenant && !baseUrl) {
     return {
       error:
-        "Missing tenant: X-Halo-Tenant or X-Halo-Base-URL (or HALOPSA_TENANT / HALOPSA_BASE_URL)",
+        "Missing tenant: X-Halo-Tenant or X-Halo-Base-URL",
     };
   }
 
